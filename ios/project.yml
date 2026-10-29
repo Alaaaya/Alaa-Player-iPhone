@@ -15,10 +15,11 @@ targets:
     platform: iOS
     sources:
       - Sources
-    resources:
       - path: www
         type: folder
-      - native-fetch.js
+        buildPhase: resources
+      - path: native-fetch.js
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.alaa.player.web
