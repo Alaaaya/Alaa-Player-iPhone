@@ -1,0 +1,1 @@
+;(function(){var cur=window.APLang&&APLang.get();document.querySelectorAll('#lang-picker button').forEach(function(b){b.classList.toggle('selected',b.dataset.lang===cur);b.setAttribute('aria-pressed',b.dataset.lang===cur?'true':'false');b.onclick=function(){if(b.dataset.lang!==cur)APLang.set(b.dataset.lang);};});})();

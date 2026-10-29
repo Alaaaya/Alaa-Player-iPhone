@@ -1,0 +1,42 @@
+const {webkit,chromium}=require('/home/kit/tvp-valet/node_modules/playwright'),http=require('http'),fs=require('fs'),path=require('path'),assert=require('assert/strict');
+const root=path.resolve(__dirname,'../app'),art=path.resolve(__dirname,'../artifacts');
+(async()=>{
+let checks=0;function check(a,b){assert.deepEqual(a,b);checks++;}
+const server=http.createServer((req,res)=>{const url=new URL(req.url,'http://localhost'),file=path.resolve(root,'.'+(url.pathname==='/'?'/index.html':url.pathname));if(!file.startsWith(root+'/')){res.statusCode=403;return res.end();}fs.readFile(file,(err,data)=>{res.statusCode=err?404:200;res.setHeader('Content-Type',file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':file.endsWith('.png')?'image/png':'text/html');res.end(err?'':data);});}).listen(0,'127.0.0.1');
+await new Promise(r=>server.on('listening',r));const url='http://127.0.0.1:'+server.address().port,engines=[];
+for(const engine of [webkit,chromium]){
+const browser=await engine.launch(Object.assign({headless:true},engine.name()==='chromium'?{executablePath:'/opt/hako/bin/google-chrome',args:['--no-sandbox']}:{})),page=await browser.newPage({viewport:{width:1920,height:1080}}),errors=[],calls=[];page.on('pageerror',e=>errors.push(e.message));
+let panelStatus='active',panelList=[{id:'xc1',name:'My television',type:'xtream',server:'https://provider.example',username:'fixture-user',password:'fixture-pass'}];
+await page.addInitScript(()=>{window.__media=[];HTMLMediaElement.prototype.load=function(){window.__media.push({op:'load',src:this.querySelector('source')?.src});};HTMLMediaElement.prototype.play=function(){window.__media.push({op:'play'});return Promise.resolve();};HTMLMediaElement.prototype.pause=function(){window.__media.push({op:'pause'});};});
+await page.route('https://jytjcdlmygwqizgydeyp.supabase.co/**',async route=>{const req=route.request(),body=req.postDataJSON();calls.push({path:new URL(req.url()).pathname,body});await route.fulfill({json:req.url().includes('register_device')?{device_code:body.p_device_code}:{status:panelStatus,expires_at:'2027-12-31',playlists:panelList}});});
+const names=['Al Jazeera','ARD Das Erste','ZDF HD','Al Arabiya','BBC News','France 24','DW Arabic','TRT World'];
+await page.route('https://provider.example/**',async route=>{const u=new URL(route.request().url()),a=u.searchParams.get('action');if(!a)return route.fulfill({status:404,body:''});let data=[];
+if(a.endsWith('_categories'))data=[{category_id:'1',category_name:'News'},{category_id:'2',category_name:'Entertainment'}];
+else if(a==='get_live_streams')data=Array.from({length:158},(_,i)=>({stream_id:i+1,name:names[i%names.length]+(i>=8?' '+(i+1):''),category_id:i%2?'2':'1'}));
+else if(a==='get_vod_streams')data=[{stream_id:201,name:'The Northern Lights',category_id:'2',container_extension:'mp4'},{stream_id:202,name:'Beyond the Horizon',category_id:'2',container_extension:'mkv'}];
+else if(a==='get_series')data=[{series_id:301,name:'A New Beginning',category_id:'2'}];
+else if(a==='get_series_info')data={episodes:{'1':[{id:401,title:'The First Day',container_extension:'mp4'},{id:402,title:'The Journey',container_extension:'mp4'}],'2':[{id:403,title:'Home',container_extension:'mp4'}]}};
+await route.fulfill({json:data});});
+await page.goto(url);await page.waitForFunction(()=>document.querySelector('#count').textContent==='158 channels');
+check(await page.locator('#connection').isVisible(),false);check(await page.locator('#items button').count(),75);check(calls[0].path.endsWith('register_device'),true);check(calls[0].body.p_mac.startsWith('webOS-'),true);
+check(await page.locator('#items button').evaluateAll(es=>es.every((e,i)=>i===0||e.getBoundingClientRect().top>es[i-1].getBoundingClientRect().top)),true);
+await page.screenshot({path:art+'/live-'+engine.name()+'.png'});
+await page.keyboard.press('ArrowDown');check(await page.locator('#items button').nth(1).evaluate(el=>el===document.activeElement),true);
+await page.locator('#pagination button').last().click();check(await page.locator('#pagination span').textContent(),'2 / 3');
+await page.locator('#search').fill('Al Jazeera');check(await page.locator('#items button').count(),20);
+await page.locator('#search').fill('');await page.locator('#categories button').filter({hasText:'News'}).click();check(await page.locator('#count').textContent(),'79 channels · News');
+await page.locator('#items button').first().click();check(await page.locator('#player').isVisible(),true);check(await page.locator('#video source').getAttribute('type'),'application/vnd.apple.mpegurl');check(await page.locator('#video source').getAttribute('src'),'https://provider.example/live/fixture-user/fixture-pass/1.m3u8');
+await page.keyboard.press('Escape');check(await page.locator('#player').isVisible(),false);check(await page.locator('#video source').count(),0);
+await page.locator('[data-kind="movies"]').click();await page.waitForFunction(()=>document.querySelector('#count').textContent==='2 titles');await page.screenshot({path:art+'/movies-'+engine.name()+'.png'});await page.locator('#items button').first().click();check((await page.locator('#video source').getAttribute('src')).endsWith('/201.mp4'),true);check(await page.locator('#seek-forward').isVisible(),true);await page.keyboard.press('Escape');
+await page.locator('[data-kind="series"]').click();await page.waitForFunction(()=>document.querySelector('#count').textContent==='1 titles');await page.locator('#items button').first().click();await page.waitForFunction(()=>document.querySelector('#heading').textContent==='Episodes');check(await page.locator('#items button').count(),3);await page.locator('#items button').first().click();check((await page.locator('#video source').getAttribute('src')).includes('/series/'),true);await page.keyboard.press('Escape');await page.keyboard.press('Escape');check(await page.locator('#heading').textContent(),'Series');
+await page.locator('#settings-open').click();check(await page.locator('#connection').isVisible(),true);await page.screenshot({path:art+'/connection-'+engine.name()+'.png'});
+panelStatus='expired';await page.locator('#sync').click();await page.waitForFunction(()=>document.querySelector('#activation').textContent.includes('expired'));check(await page.locator('#items button').count(),0);check(await page.locator('#providers option').count(),0);
+panelStatus='active';await page.locator('#sync').click();await page.waitForFunction(()=>document.querySelector('#count').textContent==='1 titles');await page.locator('#settings-open').click();panelList=[];await page.locator('#sync').click();await page.waitForFunction(()=>document.querySelector('#providers').options.length===0);check(await page.locator('#items button').count(),0);check(await page.locator('#player').isVisible(),false);
+await page.locator('#manual-toggle').click();await page.route('https://playlist.example/**',r=>r.fulfill({body:'#EXTM3U\n#EXTINF:-1 group-title="Test",<img src=x onerror=alert(1)>\nhttps://stream.example/demo.ts'}));await page.locator('#manual-url').fill('https://playlist.example/list.m3u');await page.locator('#manual button[type=submit]').click();await page.waitForFunction(()=>document.querySelector('#count').textContent==='1 channels');check(await page.locator('#items .item-name').textContent(),'<img src=x onerror=alert(1)>');check(await page.locator('#items .item-name img').count(),0);
+await page.locator('#items button').first().click();check(await page.locator('#video source').getAttribute('type'),'video/mp2t');await page.keyboard.press('Escape');
+check(await page.evaluate(()=>Object.keys(localStorage).sort()),['ap-webos-code']);
+await page.setViewportSize({width:1280,height:720});await page.waitForFunction(()=>Math.round(document.querySelector('#screen').getBoundingClientRect().width)===1280);check(await page.locator('#screen').evaluate(el=>Math.round(el.getBoundingClientRect().width)),1280);check(errors,[]);
+engines.push({engine:engine.name(),checks,errors,media:'HTMLMediaElement mocked; source routing and cleanup only, not codec playback'});await browser.close();
+}
+server.close();fs.writeFileSync(art+'/ui-results.json',JSON.stringify({assertions:checks,engines,network:'ALL panel and provider calls mocked. No production device registered.',hardware:false},null,2));console.log(checks+' UI assertions passed');
+})().catch(e=>{console.error(e);process.exit(1)});

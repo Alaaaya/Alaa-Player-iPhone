@@ -1,0 +1,17 @@
+{
+  "name": "alaa-player-webos",
+  "version": "2.4.0",
+  "private": true,
+  "scripts": {
+    "check": "node --check app/app.js && node --check app/core.js && node --check app/featured.js && node --test tests/core.cjs tests/featured.cjs",
+    "test:ui": "node tests/redesign.cjs",
+    "package": "npm run build && /home/kit/alaa-tv-webos/node_modules/.bin/ares-package dist -o artifacts --no-minify",
+    "test:featured": "node tests/featured-ui.cjs",
+    "build": "node scripts/build.cjs",
+    "test:compat": "node tests/compat.cjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "lightningcss": "^1.33.0"
+  }
+}

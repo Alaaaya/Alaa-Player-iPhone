@@ -1,0 +1,4 @@
+const assert=require('assert/strict'),fs=require('fs'),vm=require('vm');const source=fs.readFileSync('app/app.js','utf8');const start=source.indexOf('function posterTitle('),end=source.indexOf('function metadata(',start),ctx={window:{}};vm.createContext(ctx);vm.runInContext(source.slice(start,end),ctx);const {title,metadata}=ctx.window.APPosterDisplay;
+for(const name of ['4K-SH - Name',' 8k-sh: Name','FHD-SH | Name','SH-4K - Name','4K-AR-DO - Name','4K - AR - DO - Name','4K - AR - Name'])assert.equal(title(name),'Name');
+for(const name of ['4K Love Story','SHADOW','HD - ordinary','AR - ordinary','Name 4K-SH - intact'])assert.equal(title(name),name);
+assert.equal(metadata({}), '');assert.equal(metadata({year:'2025',rating:8}),'2025 · ★ 8');assert.equal(metadata({year:'unknown',rating:'N/A'}),'');console.log('POSTER_TITLE_METADATA134_PASS');

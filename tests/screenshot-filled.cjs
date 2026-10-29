@@ -1,0 +1,42 @@
+const {webkit,chromium}=require('/home/kit/tvp-valet/node_modules/playwright'),http=require('http'),fs=require('fs'),path=require('path'),assert=require('assert/strict');
+(async()=>{
+let checks=0;function check(a,b){assert.deepEqual(a,b);checks++;}
+const root=path.resolve(__dirname,'../app'),art=path.resolve(__dirname,'../artifacts');
+const server=http.createServer((req,res)=>{let pathname=new URL(req.url,'http://x').pathname,file=path.resolve(root,'.'+(pathname==='/'?'/index.html':pathname));if(!file.startsWith(root+'/'))return res.end();fs.readFile(file,(e,data)=>{res.statusCode=e?404:200;res.setHeader('Content-Type',file.endsWith('.svg')?'image/svg+xml':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.woff2')?'font/woff2':'text/html');res.end(e?'':data);});}).listen(0,'127.0.0.1');await new Promise(r=>server.on('listening',r));
+const results=[];
+for(const engine of [webkit,chromium]){
+let countBefore=checks;
+const browser=await engine.launch(Object.assign({headless:true},engine.name()==='chromium'?{executablePath:'/opt/hako/bin/google-chrome',args:['--no-sandbox']}:{})),page=await browser.newPage({viewport:{width:1920,height:1080}}),errors=[],calls=[];page.on('pageerror',e=>errors.push(e.message));let panelStatus='active',p={id:'test1',type:'xtream',server:'https://provider.example',name:'المزوّد التجريبي',username:'mock-user',password:'mock-pass'},playlists=[p];
+await page.addInitScript(()=>{window.__media=[];HTMLMediaElement.prototype.load=function(){window.__media.push({op:'load',id:this.id,src:this.querySelector('source')?.src});};HTMLMediaElement.prototype.play=function(){window.__media.push({op:'play',id:this.id});return Promise.resolve();};HTMLMediaElement.prototype.pause=function(){window.__media.push({op:'pause',id:this.id});};});
+await page.route('https://jytjcdlmygwqizgydeyp.supabase.co/**',async r=>{calls.push({path:new URL(r.request().url()).pathname,body:r.request().postDataJSON()});await r.fulfill({json:r.request().url().includes('register_device')?{}:{status:panelStatus,expires_at:'2028-01-01',playlists}});});
+const svg=(shape)=>'<svg xmlns="http://www.w3.org/2000/svg" width="'+(shape==='backdrop'?1200:240)+'" height="'+(shape==='backdrop'?500:360)+'"><rect width="100%" height="100%" fill="#27374e"/><rect x="20" y="20" width="80%" height="85%" rx="12" fill="#344862"/><text x="50%" y="48%" text-anchor="middle" fill="#bdc8d8" font-size="30">TEST '+(shape==='backdrop'?'BACKDROP':'POSTER')+'</text><text x="50%" y="60%" text-anchor="middle" fill="#879bb8" font-size="18">PROVIDER FIXTURE</text></svg>';
+await page.route('https://images.example/**',r=>{const n=Number((r.request().url().match(/badge-(\d+)/)||[])[1]||0),labels=['MBC 1','DRAMA','MBC 2','MBC 3','MBC 4','الجزيرة','العربية','beIN 1','beIN 2','beIN 3','ROTANA','DRAMA','OSN','OSN','LBC','SYRIA'];r.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect width="120" height="120" rx="22" fill="'+['#b41637','#5b2987','#147b9b','#aa771d'][n%4]+'"/><text x="60" y="69" fill="white" font-family="sans-serif" font-weight="bold" font-size="22" text-anchor="middle">'+(labels[n]||'TV '+(n+1))+'</text></svg>'});});
+await page.route('https://provider.example/**',async r=>{const a=new URL(r.request().url()).searchParams.get('action');let data=[];
+if(a&&a.endsWith('_categories'))data=[{category_id:'1',category_name:'أخبار'},{category_id:'2',category_name:'ترفيه'},{category_id:'3',category_name:'وثائقي'},{category_id:'4',category_name:'رياضة'}];
+else if(a==='get_live_streams')data=['MBC 1','MBC Drama','MBC 2','MBC 3','MBC 4','الجزيرة','العربية','beIN Sports 1','beIN Sports 2','beIN Sports 3','Rotana Cinema','Rotana Drama','OSN Movies','OSN Series','LBC','Syria TV','تلفزيون دبي','أبوظبي','قناة سما','الجديد','MTV Lebanon','ناشيونال جيوغرافيك','الشرق','الجزيرة الوثائقية','SSC 1'].map((name,i)=>({quality:i%3?'HD':'4K',stream_id:i+1,name,category_id:String(i%4+1),stream_icon:'https://images.example/badge-'+i+'.svg',program_name:i===7?'استوديو التحليل • الدوري الإسباني':undefined}));
+else if(a==='get_vod_streams')data=Array.from({length:80},(_,i)=>({stream_id:2001+i,name:'فيلم تجريبي '+(i+1),category_id:String(i%4+1),stream_icon:'https://images.example/poster.svg',backdrop_path:['https://images.example/backdrop.svg'],added:String(10000-i),plot:'وصف تجريبي يقدّمه مزوّد المحتوى لاختبار عرض التفاصيل.',genre:'دراما',rating:'8.2',year:'2025',quality:'HD',container_extension:'mp4'}));
+else if(a==='get_series')data=Array.from({length:36},(_,i)=>({series_id:3001+i,name:'مسلسل تجريبي '+(i+1),category_id:String(i%4+1),cover:'https://images.example/poster.svg',seasons_count:3,last_modified:String(9000-i),rating:'7.8',year:'2024',backdrop_path:['https://images.example/backdrop.svg']}));
+else if(a==='get_series_info')data={info:{plot:'ملخص تجريبي من المزوّد عن أحداث المسلسل.',genre:'دراما',status:'مستمر'},episodes:{'1':[{id:4001,episode_num:1,title:'الحلقة الأولى',info:{plot:'وصف الحلقة الأولى كما يقدّمه المزوّد.',duration:'00:43:20',releasedate:'2025-04-10'},container_extension:'mp4'},{id:4002,title:'الحلقة الثانية',container_extension:'mp4'}],'2':[{id:4003,title:'بداية جديدة',container_extension:'mp4'}]}};
+await r.fulfill({json:data});});
+await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForFunction(()=>document.querySelector('#count').textContent==='25 قناة');await page.waitForTimeout(100);
+
+await page.waitForFunction(()=>document.querySelectorAll('#home-movies button').length===6);
+await page.locator('#settings-open').click();await page.locator('#theme-red').click();await page.locator('#connection-close').click();await page.locator('#nav-home').click();
+await page.locator('nav [data-kind="live"]').click();await page.waitForTimeout(200);
+await page.locator('#items button').nth(7).focus();
+await page.locator('#items button').nth(7).click();
+await page.locator('#stop').click();
+await page.waitForTimeout(150);
+await page.evaluate(()=>{
+ const cover=document.querySelector('#cover');cover.querySelectorAll('img,span').forEach(e=>e.remove());
+ const svg='<svg xmlns="http://www.w3.org/2000/svg" width="768" height="432"><defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#283c67"/><stop offset="1" stop-color="#8b6382"/></linearGradient><linearGradient id="grass" x2="0" y2="1"><stop stop-color="#307d42"/><stop offset="1" stop-color="#164e35"/></linearGradient></defs><rect width="768" height="432" fill="url(#sky)"/><path d="M0 110 Q384 10 768 110 L768 230 L0 230Z" fill="#1d273c"/><path d="M0 150 Q384 50 768 150 M0 175 Q384 75 768 175 M0 200 Q384 100 768 200" fill="none" stroke="#8391ab" stroke-width="8"/><path d="M0 240 L768 240 L768 432 L0 432Z" fill="url(#grass)"/><path d="M40 410 L205 250 L563 250 L728 410Z M384 250 L384 410" fill="none" stroke="#c2e2bc" stroke-width="2"/><ellipse cx="384" cy="323" rx="75" ry="30" fill="none" stroke="#c2e2bc" stroke-width="2"/><g fill="#fff8cf"><circle cx="60" cy="95" r="9"/><circle cx="708" cy="95" r="9"/></g><rect x="25" y="25" width="180" height="38" rx="5" fill="#321257"/><text x="40" y="51" font-size="23" fill="white" font-family="sans-serif">beIN SPORTS 1</text><rect x="530" y="25" width="210" height="38" rx="5" fill="#151c2d"/><text x="550" y="50" font-size="20" fill="white" font-family="sans-serif">LIVE • HD</text><rect y="365" width="768" height="67" fill="#11192c" opacity=".85"/><text x="735" y="406" text-anchor="end" fill="white" font-family="sans-serif" font-size="27">استوديو التحليل • الدوري الإسباني</text></svg>';
+ const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);img.style.cssText='width:100%;height:100%;object-fit:cover';cover.prepend(img);
+ document.querySelector('#detail-kind').textContent='الآن • استوديو التحليل';document.querySelector('#detail-name').textContent='beIN Sports 1';document.querySelector('#detail-group').textContent='رياضة';document.querySelector('#detail-quality').textContent='HD';document.querySelectorAll('#items button').forEach(b=>b.classList.remove('selected'));
+});
+await page.waitForTimeout(300);
+check(await page.locator('#player').isVisible(),false);check(await page.locator('#browser').isVisible(),true);check(await page.locator('#cover').isVisible(),true);
+await page.screenshot({path:art+'/live-filled-preview-fixed-'+engine.name()+'.png'});
+check(errors,[]);await browser.close();
+}
+server.close();console.log(checks+' live geometry assertions PASS');
+})().catch(e=>{console.error(e);process.exit(1);});
