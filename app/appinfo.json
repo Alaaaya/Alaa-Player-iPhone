@@ -1,0 +1,15 @@
+{
+  "id": "com.alaa.player.webos",
+  "version": "2.4.0",
+  "vendor": "Alaa",
+  "type": "web",
+  "main": "index.html",
+  "title": "Alaa IPTV",
+  "appDescription": "Alaa Player for LG webOS - live TV, movies and series",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true,
+  "bgColor": "#07111b",
+  "requiredACG": []
+}

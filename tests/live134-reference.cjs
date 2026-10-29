@@ -1,0 +1,49 @@
+const{chromium}=require('/home/kit/tmp/player124/node_modules/playwright'),fs=require('fs'),assert=require('assert/strict');
+(async()=>{const b=await chromium.launch({executablePath:'/home/kit/tmp/player124/chrome-linux/chrome',headless:true,args:['--no-sandbox','--autoplay-policy=no-user-gesture-required']});const results=[];
+try{for(const theme of ['apple','navy','red','blue'])for(const width of [1920,1280]){
+const c=await b.newContext({bypassCSP:true,viewport:{width,height:width===1920?1080:720}}),p=await c.newPage();await p.addInitScript(t=>localStorage.setItem('ap-theme',t),theme);
+const cors={'access-control-allow-origin':'*','access-control-allow-headers':'*'};const video=fs.readFileSync('/home/kit/tmp/ovfix/broadcast.webm');
+await p.route('**/*',async r=>{const u=new URL(r.request().url());if(u.protocol==='file:')return r.continue();let data=[];
+if(u.hostname.includes('supabase'))data=u.pathname.includes('register_device')?{}:{status:'active',playlists:[{id:'test',type:'xtream',server:'https://fixture.example',username:'test',password:'test',name:'Live'}]};
+else if(u.hostname==='fixture.example'){const a=u.searchParams.get('action');if(u.pathname==='/logo.svg')return r.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="100" height="70"><rect width="100" height="70" fill="red"/><text x="8" y="40" fill="white">SPORT</text></svg>'});if(u.pathname==='/broken.svg')return r.fulfill({status:404,body:''});if(!a)return r.fulfill({headers:{...cors,'content-type':'video/webm'},body:video});if(a==='get_live_categories')data=[{category_id:'1',category_name:'SPORTS'}];if(a==='get_live_streams')data=Array.from({length:600},(_,i)=>({stream_id:i+1,name:(i+1)+' - '+(i===1?'SPORT TWO':'SPORT HD'),category_id:'1',stream_type:'live',stream_icon:i%2===0?'https://fixture.example/logo.svg':'https://fixture.example/broken.svg',container_extension:'webm'}));}
+return r.fulfill({headers:cors,json:data});});
+await p.goto('file:///home/kit/alaa-player-webos/dist/index.html');await p.waitForFunction(()=>document.querySelector('#home-tiles button')&&document.getElementById('connection').hidden);
+await p.locator('nav [data-kind="live"]').click();await p.waitForSelector('#items button');await p.locator('#items button').first().click();await p.waitForFunction(()=>!document.getElementById('player').hidden);
+await p.evaluate(()=>{const v=document.getElementById('video');v.querySelector('source').removeAttribute('type');v.load();v.play();});await p.waitForFunction(()=>document.getElementById('video').currentTime>0.1);await p.evaluate(()=>document.getElementById('video').loop=true);
+
+assert.equal(await p.evaluate(()=>document.getElementById('player').dataset.playbackKind),'live');
+assert.equal(await p.evaluate(()=>getComputedStyle(document.getElementById('live-now')).backdropFilter),'none');
+assert.equal(await p.evaluate(()=>getComputedStyle(document.getElementById('player-ui')).display),'none');
+assert.equal(await p.locator('#live-now strong').innerText(),'SPORT HD');
+await p.waitForFunction(()=>document.querySelector('#live-now img')&&document.querySelector('#live-now img').naturalWidth>0);
+const geometry=await p.evaluate(()=>{var b=document.getElementById('live-now'),r=b.getBoundingClientRect(),c=document.querySelector('.live-transport').getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,background:getComputedStyle(b).backgroundImage,controlCenter:c.x+c.width/2};});
+assert.equal(geometry.w,width);assert.equal(geometry.h,width*9/16);assert.equal(geometry.y,0);assert.ok(geometry.background.includes('gradient'));assert.ok(Math.abs(geometry.controlCenter-width/2)<1);
+assert.match(await p.locator('#live-elapsed').innerText(),/^\d\d:\d\d:\d\d$/);
+if(width===1920)await p.screenshot({path:'/home/kit/tmp/live134-'+theme+'.png'});
+await p.waitForTimeout(4250);assert.equal(await p.locator('#live-now').isVisible(),false);
+await p.keyboard.press('ArrowRight');assert.equal(await p.locator('#live-now').isVisible(),true);assert.equal(await p.evaluate(()=>document.activeElement.id),'live-pause');
+await p.keyboard.press('Enter');await p.waitForTimeout(50);assert.equal(await p.evaluate(()=>document.getElementById('video').paused),true);
+await p.keyboard.press('Enter');await p.waitForTimeout(100);assert.equal(await p.evaluate(()=>document.getElementById('video').paused),false);
+await p.keyboard.press('ArrowRight');assert.equal(await p.evaluate(()=>document.activeElement.id),'live-next');
+await p.keyboard.press('Enter');await p.waitForFunction(()=>document.querySelector('#live-now strong').textContent==='SPORT TWO');
+await p.waitForFunction(()=>!document.querySelector('#live-now img'));assert.ok(await p.locator('#live-now .logo-initials').isVisible());
+await p.keyboard.press('ArrowRight'); // transport focus after zap
+await p.locator('#live-sub').click();assert.equal(await p.locator('#live-panel').isVisible(),true);
+assert.ok((await p.locator('#live-panel').innerText()).includes('OFF'));
+await p.waitForTimeout(4200);assert.equal(await p.locator('#live-panel').isVisible(),true);assert.equal(await p.locator('#live-now').isVisible(),true);
+await p.keyboard.press('Escape');assert.equal(await p.locator('#live-panel').count(),0);assert.equal(await p.evaluate(()=>document.activeElement.id),'live-sub');
+await p.keyboard.press('ArrowRight');assert.equal(await p.evaluate(()=>document.activeElement.id),'live-favorite');
+await p.keyboard.press('Enter');assert.equal(await p.locator('#live-favorite').getAttribute('aria-pressed'),'true');
+assert.ok((await p.evaluate(()=>localStorage.getItem('ap-favorites'))).includes('2'));
+await p.keyboard.press('ArrowRight');await p.keyboard.press('Enter');assert.equal(await p.locator('#live-panel').isVisible(),true);
+await p.keyboard.press('ArrowDown');await p.keyboard.press('Enter');assert.equal(await p.evaluate(()=>document.getElementById('video').style.objectFit),'contain');
+await p.keyboard.press('Escape');assert.equal(await p.evaluate(()=>document.activeElement.id),'live-settings');
+await p.keyboard.press('ArrowDown');assert.equal(await p.evaluate(()=>document.activeElement.id),'live-list');await p.keyboard.press('Enter');
+await p.waitForFunction(()=>!document.getElementById('quick-channels').hidden);
+assert.equal(await p.locator('#live-now').isVisible(),false);
+for(let i=0;i<50;i++)await p.keyboard.press('ArrowDown');
+assert.equal(await p.evaluate(()=>document.activeElement.dataset.quickIndex),'51');
+await p.keyboard.press('Enter');await p.keyboard.press('Escape');await p.waitForFunction(()=>document.getElementById('player').hidden);
+results.push({theme,width,geometry,pause:true,zap:true,subtitles:true,favorite:true,settings:true,focus:true,autoHide:true,channelOverlay:true});
+await c.close();
+}fs.writeFileSync('/home/kit/tmp/live134-tests.json',JSON.stringify(results,null,2));console.log('Live 1.3.4 passed',results.length);}finally{await b.close()}})().catch(e=>{console.error(e);process.exit(1)});

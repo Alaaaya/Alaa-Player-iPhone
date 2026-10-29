@@ -1,0 +1,1 @@
+window.PANEL_PUBLIC={"base": "https://jytjcdlmygwqizgydeyp.supabase.co", "anon": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp5dGpjZGxteWd3cWl6Z3lkZXlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEwMzQzODUsImV4cCI6MjEwNjYxMDM4NX0.zcr_TaxhweaScYeHxuSNzwBtHj0cgkp9JSfbsmkIr4Y"};
