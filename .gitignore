@@ -1,3 +1,9 @@
 node_modules/
 dist/
 artifacts/
+
+ios/www/
+ios/build/
+ios/Payload/
+ios/*.xcodeproj/
+*.ipa
