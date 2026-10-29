@@ -26,6 +26,7 @@ final class PlayerController: UIViewController, WKNavigationDelegate, WKScriptMe
     override func viewDidLoad() {
         super.viewDidLoad()
         let config = WKWebViewConfiguration()
+        config.userContentController.addUserScript(WKUserScript(source: "window.APForceTouch=true;", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         config.allowsAirPlayForMediaPlayback = true

@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-window.APTouch=!!(navigator.maxTouchPoints>0&&matchMedia('(pointer:coarse)').matches);
+window.APTouch=!!(window.APForceTouch||(navigator.maxTouchPoints>0&&matchMedia('(pointer:coarse)').matches));
 if(!window.APTouch)return;
 document.body.classList.add('touch');
 var back=document.createElement('button');back.id='touch-back';back.textContent='‹';back.setAttribute('aria-label','Back');back.onclick=function(){if(window.apTouchBack)window.apTouchBack();};document.body.appendChild(back);
