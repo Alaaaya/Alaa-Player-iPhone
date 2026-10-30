@@ -21,6 +21,9 @@ targets:
       - package: VLCKit
     sources:
       - Sources
+      - path: Licenses
+        type: folder
+        buildPhase: resources
       - path: www
         type: folder
         buildPhase: resources
