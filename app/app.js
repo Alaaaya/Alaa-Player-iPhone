@@ -1123,7 +1123,7 @@ function openLivePanel(type){
 if(livePanel)closeLivePanel();clearTimeout(zapTimer);
 var panel=document.createElement('div');panel.id='live-panel';panel.dataset.returnFocus=type==='quality'?'live-quality':type==='sub'?'live-sub':type==='audio'?'live-audio':'live-settings';panel.setAttribute('role','dialog');panel.setAttribute('aria-label',type==='sub'?tr('الترجمة'):type==='audio'?tr('الصوت'):type==='quality'?tr('الجودة'):tr('إعدادات المشغل'));livePanel=panel;
 var heading=document.createElement('h2');heading.textContent=type==='sub'?tr('الترجمة'):type==='audio'?tr('الصوت'):type==='quality'?tr('الجودة'):tr('إعدادات المشغل');panel.appendChild(heading);
-function choice(label,fn){var b=button(label,fn);panel.appendChild(b);return b;}
+function choice(label,fn){var b=button(label,function(){fn();if(window.APTouch&&livePanel)closeLivePanel();});panel.appendChild(b);return b;}
 choice(tr('رجوع'),closeLivePanel);
 if(type==='sub'){var tracks=video.textTracks||[];choice('OFF',function(){for(var i=0;i<tracks.length;i++)tracks[i].mode='disabled';fRememberTracks();});
 for(var i=0;i<tracks.length;i++)(function(t){choice(t.label||t.language||tr('Track ')+(i+1),function(){for(var j=0;j<tracks.length;j++)tracks[j].mode='disabled';t.mode='showing';fRememberTracks();});})(tracks[i]);
@@ -1193,7 +1193,7 @@ play(next);hideControls();
 showLiveBar();
 }
 document.addEventListener('ap-vod-controls',function(){showControls();});
-function controlsMenuOpen(){return !!livePanel||!$('quick-channels').hidden||($('f21-modal')&&!$('f21-modal').hidden)||($('f21-next')&&!$('f21-next').hidden);}
+function controlsMenuOpen(){return !!($("phone-more-sheet")&&!$("phone-more-sheet").hidden)||!!livePanel||!$('quick-channels').hidden||($('f21-modal')&&!$('f21-modal').hidden)||($('f21-next')&&!$('f21-next').hidden);}
 function armControlsHide(){clearTimeout(hideTimer);clearTimeout(zapTimer);hideTimer=setTimeout(function(){if(!state.playing)return;if((video.paused&&!window.APTouch)||controlsMenuOpen()){armControlsHide();return;}$('player-ui').classList.add('dim');hideLiveBar();if(fSkip)fSkip.hidden=true;},4000);}
 function showControls(){if(state.playing&&state.playing.kind==='live'){showLiveBar();return;}clearSeekFeedback();$('player-ui').classList.remove('dim');armControlsHide();}
 var controlsPointer=null;
@@ -1225,6 +1225,21 @@ var hidden=$('player-ui').classList.contains('dim');
 if(!hidden&&document.activeElement!==$('progress'))return;
 e.preventDefault();e.stopImmediatePropagation();seek(k==='ArrowRight'?10:-10,hidden);
 },true);
+function dismissPhoneOverlays(){
+if(livePanel){livePanel.remove();livePanel=null;}
+$('quick-channels').hidden=true;
+['phone-more-sheet','red-sublist','f21-modal','f21-next'].forEach(function(id){var n=$(id);if(n)n.hidden=true;});
+hideControls();hideLiveBar();if(fSkip)fSkip.hidden=true;
+}
+if(window.APTouch){
+$('player').addEventListener('click',function(e){
+var target=e.target;
+if(target.closest('button,input,select,#quick-channels,#live-panel,#red-sublist,#phone-more-sheet,#f21-modal,#f21-next'))return;
+var open=livePanel||!$('quick-channels').hidden||['phone-more-sheet','red-sublist','f21-modal'].some(function(id){return $(id)&&!$(id).hidden;});
+if(open||!$('player-ui').classList.contains('dim')||($('live-now')&&!$('live-now').hidden)){dismissPhoneOverlays();}else showControls();
+},true);
+document.addEventListener('keydown',function(e){if((e.key==='Escape'||e.key==='BrowserBack')&&state.playing){var open=livePanel||!$('quick-channels').hidden||['phone-more-sheet','red-sublist','f21-modal'].some(function(id){return $(id)&&!$(id).hidden;});if(open){e.preventDefault();e.stopImmediatePropagation();dismissPhoneOverlays();}}},true);
+}
 window.apTouchBack=function(){back();};
 function back(){if(!$('quick-channels').hidden){$('quick-channels').hidden=true;if(episodePresentation&&!episodePresentation.full)episodeFocus();else if((document.body.dataset.theme==='aya'||document.body.dataset.theme==='alaa'||document.body.dataset.theme==='harak'||document.body.dataset.theme==='muse'||document.body.dataset.theme==='velour')&&state.playing&&state.playing.kind==='live'){showLiveBar();$('live-list').focus();}else{showControls();$('quick-toggle').focus();}return;}if(!$('series-detail').hidden&&(!episodePresentation||!episodePresentation.full)&&$('connection').hidden){closeSeriesDetail();return;}if(episodePresentation&&episodePresentation.full){setEpisodeFullscreen(false);return;}if($('player').hidden&&$('connection').hidden&&homeInline.tile){if(homeInline.origin&&!$('series-detail').hidden){++state.request;returnHomeInline();return;}if(state.view==='home'&&$('movie-detail').hidden&&$('series-detail').hidden){homeTileFocus();return;}}if(!$('movie-detail').hidden&&$('player').hidden&&$('connection').hidden){++state.request;$('movie-back').click();return;}if($('home-details').open){$('home-details').close();$('home-info').focus();return;}if(!$('quick-channels').hidden){$('quick-channels').hidden=true;hideControls();$('stop').focus();return;}if(!$('player').hidden){stop();return;}if(!$('manual').hidden){$('manual').hidden=true;$('manual-toggle').focus();return;}if(!$('connection').hidden){connection(false);return;}if(!$('series-detail').hidden){$('series-detail').hidden=true;render();focusFirst();return;}if(state.episodes){state.items=state.episodes;state.episodes=null;state.group='All';state.page=0;$('search').value='';render();focusFirst();return;}if(state.view!=='home'){state.view='home';state.filter='all';render();$('nav-home').focus();return;}if(window.webOS&&webOS.platformBack)webOS.platformBack();else if(window.PalmSystem&&PalmSystem.stageReady)window.close();else connection(true);}
 $('providers').onchange=function(){selectProvider(this.value);};
