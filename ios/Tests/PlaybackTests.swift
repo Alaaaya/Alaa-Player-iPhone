@@ -63,7 +63,7 @@ final class PlaybackTests: XCTestCase {
                     v.pause();v.replaceChildren();v.removeAttribute('src');v.load();
                     player.hidden=false;player.dataset.playbackKind=kind==='live'?'live':'vod';
                     const s=document.createElement('source');s.src=item.url;if(/m3u8(?:$|\\?)/i.test(item.url))s.type='application/vnd.apple.mpegurl';
-                    v.appendChild(s);v.load();await v.play();return true;
+                    v.appendChild(s);v.load();try{await v.play();}catch(e){return false;}return true;
                 """,arguments:["item":item,"kind":kind],in:nil,contentWorld:.page)
                 var start: Double?
                 for _ in 0..<200 {
