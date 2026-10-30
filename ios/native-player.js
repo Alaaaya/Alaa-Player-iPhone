@@ -16,9 +16,9 @@ function emit(name){v.dispatchEvent(new Event(name));}
 });
 v.load=function(){
  var source=v.querySelector('source'),url=v.getAttribute('src')||source&&source.src;
- if(active){send('stop').catch(function(){});active=false;document.body.classList.remove('native-media');}
+ if(active){send('stop').catch(function(){});active=false;document.body.classList.remove('native-media');document.documentElement.style.background='';}
  if(!url||document.getElementById('player').dataset.playbackKind==='live'){original.load();return;}
- original.pause();active=true;id++;info={state:'waiting'};loaded=false;prior='';document.body.classList.add('native-media');
+ original.pause();active=true;id++;info={state:'waiting'};loaded=false;prior='';document.body.classList.add('native-media');document.documentElement.style.background='transparent';
  send('open',{url:url}).catch(function(){info.state='error';emit('error');});
 };
 v.play=function(){return active?send('play').then(function(){}):original.play();};
