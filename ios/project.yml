@@ -43,5 +43,27 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
-          NSAllowsArbitraryLoadsInWebContent: true
         NSLocalNetworkUsageDescription: Connect to your own IPTV server on your local network.
+  NativeBridgeTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+      - path: test-provider.json
+        buildPhase: resources
+    dependencies:
+      - target: AlaaPlayer
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.alaa.player.web.tests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/AlaaPlayer.app/AlaaPlayer"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+schemes:
+  AlaaPlayer:
+    build:
+      targets:
+        AlaaPlayer: all
+        NativeBridgeTests: [test]
+    test:
+      targets: [NativeBridgeTests]

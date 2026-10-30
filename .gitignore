@@ -7,3 +7,7 @@ ios/build/
 ios/Payload/
 ios/*.xcodeproj/
 *.ipa
+
+ios/test-provider.json
+ios/sim-build/
+old-shots/
