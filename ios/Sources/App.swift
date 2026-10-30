@@ -31,6 +31,9 @@ final class PlayerController: UIViewController, WKNavigationDelegate, WKScriptMe
         return URLSession(configuration: c)
     }()
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
+    override var prefersStatusBarHidden: Bool { true }
+    override var prefersHomeIndicatorAutoHidden: Bool { true }
+    deinit { mediaTimer?.invalidate(); nativePlayer.stop() }
     override func viewDidLoad() {
         super.viewDidLoad()
         let config = WKWebViewConfiguration()
@@ -45,7 +48,7 @@ final class PlayerController: UIViewController, WKNavigationDelegate, WKScriptMe
             config.userContentController.addUserScript(WKUserScript(source: js, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         config.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "nativePlayer")
-        if let url = Bundle.main.url(forResource: "native-player", withExtension: "js"), let js = try? String(contentsOf: url) {
+        if let url = Bundle.main.url(forResource: "native-player", withExtension: "js"), let js = try? String(contentsOf: url, encoding: .utf8) {
             config.userContentController.addUserScript(WKUserScript(source: js, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         }
         surface.backgroundColor = .black
@@ -153,7 +156,8 @@ final class PlayerController: UIViewController, WKNavigationDelegate, WKScriptMe
         case "play": nativePlayer.play()
         case "pause": nativePlayer.pause()
         case "seek":
-            if let seconds = o["value"] as? Double, seconds.isFinite, seconds >= 0 {
+            if let raw = o["value"] as? Double, raw.isFinite {
+                let seconds = max(0, raw)
                 nativePlayer.time = VLCTime(int:Int32(min(seconds * 1000,Double(Int32.max))))
             }
         case "rate":
