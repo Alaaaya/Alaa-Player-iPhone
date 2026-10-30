@@ -1,0 +1,7 @@
+Alaa Player uses the unmodified official VLCKit 4.0.0-a22 framework.
+Copyright VideoLAN and VLCKit contributors.
+License GNU LGPL version 2.1 or later. Full license accompanies this notice.
+Source and build instructions https://code.videolan.org/videolan/VLCKit
+Pinned source tag https://code.videolan.org/videolan/VLCKit/-/tree/4.0.0-a22
+VLCKit is embedded as a separately loadable framework. Your personal unsigned
+build can be relinked/re-signed with a compatible rebuilt framework.
