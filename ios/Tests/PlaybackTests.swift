@@ -10,11 +10,14 @@ final class PlaybackTests: XCTestCase {
         window.rootViewController = controller
         window.makeKeyAndVisible()
         controller.loadViewIfNeeded()
+        defer { window.isHidden = true }
+        print("Integration stage: playback webview attached")
         let web = try XCTUnwrap(controller.view.subviews.compactMap{$0 as? WKWebView}.first)
         for _ in 0..<150 {
             if (try? await web.evaluateJavaScript("!!(window.AP && window.APNativePlayback)")) as? Bool == true { break }
             try await Task.sleep(nanoseconds:100_000_000)
         }
+        print("Integration stage: playback bridge ready")
         let data = try Data(contentsOf:XCTUnwrap(Bundle(for:Self.self).url(forResource:"test-provider",withExtension:"json")))
         let provider = try XCTUnwrap(JSONSerialization.jsonObject(with:data) as? [String:Any])
         // Populate through the same manual form as a real owner, not a synthetic media URL.
@@ -34,6 +37,7 @@ final class PlaybackTests: XCTestCase {
             try await Task.sleep(nanoseconds:200_000_000)
         }
         // Provider metadata supplies original container/direct_source. No invented .m3u8 path.
+        print("Integration stage: manual provider submitted")
         let media = try await web.callAsyncJavaScript("""
             const p=provider,root=p.server.replace(/\\/$/,''),api=root+'/player_api.php?username='+encodeURIComponent(p.username)+'&password='+encodeURIComponent(p.password);
             async function get(action){const r=await fetch(api+'&action='+action);if(!r.ok)throw Error('Catalog HTTP '+r.status);return r.json();}
@@ -53,9 +57,11 @@ final class PlaybackTests: XCTestCase {
             }
             return picks;
         """,arguments:["provider":provider],in:nil,contentWorld:.page)
+        print("Integration stage: playback metadata loaded")
         let candidates = try XCTUnwrap(media as? [String:Any])
         for kind in ["episode","movies","live"] {
             let rows = try XCTUnwrap(candidates[kind] as? [[String:Any]])
+            print("Integration stage: playback candidate", kind)
             var played = false
             for item in rows {
                 _ = try await web.callAsyncJavaScript("""
@@ -63,7 +69,7 @@ final class PlaybackTests: XCTestCase {
                     v.pause();v.replaceChildren();v.removeAttribute('src');v.load();
                     player.hidden=false;player.dataset.playbackKind=kind==='live'?'live':'vod';
                     const s=document.createElement('source');s.src=item.url;if(/m3u8(?:$|\\?)/i.test(item.url))s.type='application/vnd.apple.mpegurl';
-                    v.appendChild(s);v.load();try{await v.play();}catch(e){return false;}return true;
+                    v.appendChild(s);v.load();try{await Promise.race([v.play(),new Promise((_,reject)=>setTimeout(()=>reject(Error("Playback start timeout")),12000))]);}catch(e){return false;}return true;
                 """,arguments:["item":item,"kind":kind],in:nil,contentWorld:.page)
                 var start: Double?
                 for _ in 0..<200 {
