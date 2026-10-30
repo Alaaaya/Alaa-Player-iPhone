@@ -6,7 +6,12 @@ final class NativeBridgeTests: XCTestCase {
     @MainActor
     func testRealHTTPProviderThroughBundledBridge() async throws {
         let controller = PlayerController()
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 844, height: 390))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
         controller.loadViewIfNeeded()
+        defer { window.isHidden = true }
+        print("Integration stage: catalog webview attached")
         let web = try XCTUnwrap(controller.view.subviews.compactMap { $0 as? WKWebView }.first)
         var ready = false
         for _ in 0..<100 {
@@ -14,6 +19,8 @@ final class NativeBridgeTests: XCTestCase {
             if (try? await web.evaluateJavaScript("typeof window.AP==='object' && typeof window.webkit.messageHandlers.nativeFetch==='object'")) as? Bool == true { ready = true; break }
         }
         XCTAssertTrue(ready)
+        guard ready else { return }
+        print("Integration stage: catalog bridge ready")
         let ats = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "NSAppTransportSecurity") as? [String:Any])
         XCTAssertEqual(ats["NSAllowsArbitraryLoads"] as? Bool, true)
         XCTAssertNil(ats["NSAllowsArbitraryLoadsInWebContent"])
