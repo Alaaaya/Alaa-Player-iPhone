@@ -76,8 +76,8 @@ final class PlaybackTests: XCTestCase {
                 if played { break }
             }
             XCTAssertTrue(played,"Real provider \(kind) must decode video frames and advance >2 seconds")
-            let shot = try? await web.takeSnapshot(configuration:nil)
-            if let shot = shot { let a=XCTAttachment(image:shot);a.name="real-\(kind)-advancing";a.lifetime = .keepAlways;add(a) }
+            let shot = UIGraphicsImageRenderer(bounds:window.bounds).image { _ in window.drawHierarchy(in:window.bounds,afterScreenUpdates:true) }
+            let a=XCTAttachment(image:shot);a.name="real-\(kind)-advancing";a.lifetime = .keepAlways;add(a)
             print("Real media frame advancement",kind,played)
             _ = try await web.evaluateJavaScript("document.querySelector('#video').pause();document.querySelector('#video').replaceChildren();document.querySelector('#video').load()")
         }
