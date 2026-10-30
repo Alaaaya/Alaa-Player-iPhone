@@ -2,6 +2,7 @@ name: Unsigned iPhone IPA
 on:
   push:
     branches: [main]
+    paths-ignore: ['.github/workflows/ios-unverified.yml']
   workflow_dispatch:
 permissions:
   contents: read
