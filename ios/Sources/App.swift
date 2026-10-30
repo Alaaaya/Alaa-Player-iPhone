@@ -141,7 +141,7 @@ final class PlayerController: UIViewController, WKNavigationDelegate, WKScriptMe
             nativePlayer.stop()
             mediaID = o["id"] as? Int ?? 0
             lastMediaState = ""
-            let media = VLCMedia(url:url)
+            guard let media = VLCMedia(url:url) else { reply(nil,"Invalid media"); return }
             media.addOption(":network-caching=1500")
             nativePlayer.media = media
             nativePlayer.play()
