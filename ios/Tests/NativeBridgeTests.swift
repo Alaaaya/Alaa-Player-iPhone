@@ -24,10 +24,16 @@ final class NativeBridgeTests: XCTestCase {
             const root=p.server.endsWith('/')?p.server.slice(0,-1):p.server;
             const endpoint=root+'/player_api.php?username='+encodeURIComponent(p.username)+'&password='+encodeURIComponent(p.password);
             const counts={};
-            const auth=await (await fetch(endpoint)).json();
+            let auth;try{auth=await (await fetch(endpoint)).json();}catch(e){throw Error('Authentication bridge: '+e.message);}
             if(!auth.user_info || !Number(auth.user_info.auth)) throw Error('Provider auth failed');
             for(const kind of ['live','vod','series']){
-                const response=await fetch(endpoint+'&action=get_'+(kind==='series'?'series':kind+'_streams'));
+                const categoryAction=kind==='series'?'get_series_categories':'get_'+kind+'_categories';
+                let response;
+                try {
+                    const categories=await (await fetch(endpoint+'&action='+categoryAction)).json();
+                    if(!Array.isArray(categories)||!categories.length)throw Error('Empty categories');
+                    response=await fetch(endpoint+'&action=get_'+(kind==='series'?'series':kind+'_streams')+'&category_id='+encodeURIComponent(categories[0].category_id));
+                } catch(e) { throw Error(kind+' native catalog: '+e.message); }
                 if(!response.ok) throw Error('Provider HTTP '+response.status);
                 const rows=await response.json();
                 if(!Array.isArray(rows)||rows.length===0)throw Error('Empty '+kind);
