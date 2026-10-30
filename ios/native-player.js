@@ -23,7 +23,7 @@ v.load=function(){
 };
 v.play=function(){return active?send('play').then(function(){}):original.play();};
 v.pause=function(){if(active)send('pause').catch(function(){});else original.pause();};
-window.APNativeMediaUpdate=function(data){if(!active||data.id!==id)return;var previousTime=info.time||0;info=Object.assign(info,data);
+window.APNativeMediaUpdate=function(data){if(!active||data.id!==id)return;var previousTime=info.time||0;if(data.state==='ended'&&!loaded)data.state='waiting';info=Object.assign(info,data);
  if(!loaded&&data.width>0&&data.time>0){loaded=true;emit('loadedmetadata');emit('canplay');}
  if(data.state!==prior){prior=data.state;emit(data.state);}
  if(data.time!==previousTime)emit('timeupdate');
