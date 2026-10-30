@@ -19,6 +19,7 @@ final class PlaybackTests: XCTestCase {
         let provider = try XCTUnwrap(JSONSerialization.jsonObject(with:data) as? [String:Any])
         // Populate through the same manual form as a real owner, not a synthetic media URL.
         _ = try await web.callAsyncJavaScript("""
+            window.__testMedia=document.querySelector('#video');
             document.querySelector('#settings-open').click();
             document.querySelector('#manual-toggle').click();
             const type=document.querySelector('#manual-type');type.value='xtream';type.dispatchEvent(new Event('change'));
@@ -58,7 +59,7 @@ final class PlaybackTests: XCTestCase {
             var played = false
             for item in rows {
                 _ = try await web.callAsyncJavaScript("""
-                    const v=document.querySelector('#video'),player=document.querySelector('#player');
+                    const v=window.__testMedia,player=document.querySelector('#player');if(!v.parentNode)player.prepend(v);
                     v.pause();v.replaceChildren();v.removeAttribute('src');v.load();
                     player.hidden=false;player.dataset.playbackKind=kind==='live'?'live':'vod';
                     const s=document.createElement('source');s.src=item.url;if(/m3u8(?:$|\\?)/i.test(item.url))s.type='application/vnd.apple.mpegurl';

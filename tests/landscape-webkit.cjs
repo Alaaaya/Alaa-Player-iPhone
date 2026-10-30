@@ -61,5 +61,15 @@ await page.locator('#touch-menu').tap();await page.locator('#settings-open').tap
 await page.locator('#connection-close').tap();
 }
 }
+await page.locator('#touch-menu').tap();await page.locator('nav [data-kind="movies"]').tap();await page.locator('#items button').first().tap();await page.locator('#movie-play').tap();
+await page.evaluate(()=>{window.__nativeCommands=[];window.webkit={messageHandlers:{nativePlayer:{postMessage:function(o){window.__nativeCommands.push(o);return Promise.resolve({ok:true});}}}};});
+await page.evaluate(fs.readFileSync(path.resolve(__dirname,'../ios/native-player.js'),'utf8'));
+await page.evaluate(()=>{var p=document.getElementById('player'),v=document.getElementById('video');p.dataset.playbackKind='vod';v.src='https://provider.example/movie/test.mkv';v.load();v.play();window.APNativeMediaUpdate({id:1,time:3,duration:120,width:1920,height:1080,state:'playing'});});
+check(await page.evaluate(()=>document.querySelector('#video').currentTime),3);
+check(await page.evaluate(()=>document.querySelector('#video').readyState),4);
+check(await page.evaluate(()=>document.body.classList.contains('native-media')),true);
+await page.evaluate(()=>{var v=document.getElementById('video');v.currentTime=35;v.playbackRate=1.5;v.pause();v.removeAttribute('src');v.replaceChildren();v.load();});
+check(await page.evaluate(()=>document.body.classList.contains('native-media')),false);
+check(await page.evaluate(()=>window.__nativeCommands.map(x=>x.command)),['open','play','seek','rate','pause','stop']);
 check(errors,[]);console.log(JSON.stringify({checks,errors}));await browser.close();}server.close();
 })().catch(e=>{console.error(e);process.exit(1)});
