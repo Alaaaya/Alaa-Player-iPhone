@@ -999,7 +999,7 @@ pad(start/cols*row);
 episodeWindow.items.slice(start,start+size).forEach(function(e,i){
 var b=button('',function(){activateEpisode(e);});b.className='episode-row';b.appendChild(image(e.logo,'episode-art',e.name));
 var code=document.createElement('span');code.className='episode-code';code.textContent='S'+String(e.season||1).padStart(2,'0')+'E'+String(e.episode||start+i+1).padStart(2,'0');b.appendChild(code);
-var title=document.createElement('strong');title.textContent=e.name;b.appendChild(title);
+var title=document.createElement('strong');title.textContent=window.APTouch?'E'+String(e.episode||start+i+1).padStart(2,'0')+' · Episode '+(e.episode||start+i+1):e.name;b.appendChild(title);
 var meta=document.createElement('small');meta.textContent=e.duration||'';b.appendChild(meta);
 var pr=progressFor(e),bar=document.createElement('progress');bar.max=pr&&pr.duration||100;bar.value=pr&&pr.time||0;b.appendChild(bar);
 b.onfocus=function(){seriesSelected=e;};b.dataset.episodeIndex=start+i;b.dataset.episodeId=key(e);list.appendChild(b);
