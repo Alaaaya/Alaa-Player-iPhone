@@ -46,14 +46,21 @@ final class PlaybackTests: XCTestCase {
                 const categories=await get(catAction);
                 const safe=categories.filter(c=>!(/adult|xxx|porn|18\\+|erotik|horror|action|crime/i.test(c.category_name||'')));
                 safe.sort((a,b)=>Number(/kids|family|comedy|document|nature|cartoon/i.test(b.category_name))-Number(/kids|family|comedy|document|nature|cartoon/i.test(a.category_name)));
-                let items=[];
-                for(const c of safe.slice(0,8)){const rows=await get(listAction+'&category_id='+encodeURIComponent(c.category_id));if(Array.isArray(rows)&&rows.length){items=AP.xcItems(rows,categories,p,kind);break;}}
-                if(!items.length)throw Error('No nonadult '+kind+' test candidate');
-                if(kind==='series'){
-                    const details=await get('get_series_info&series_id='+encodeURIComponent(items[0].id));
-                    const episodes=AP.episodes(details,p);if(!episodes.length)throw Error('No episodes');
-                    picks.episode=episodes.slice(0,3);
-                }else picks[kind]=items.slice(0,3);
+                const pool=[];
+                for(const c of safe.slice(0,5)){
+                    const rows=await get(listAction+'&category_id='+encodeURIComponent(c.category_id));
+                    if(!Array.isArray(rows)||!rows.length)continue;
+                    const items=AP.xcItems(rows,categories,p,kind);
+                    if(kind==='series'){
+                        for(const series of items.slice(0,2)){
+                            const details=await get('get_series_info&series_id='+encodeURIComponent(series.id));
+                            const episodes=AP.episodes(details,p);pool.push(...episodes.slice(0,2));
+                        }
+                    }else pool.push(...items.slice(0,3));
+                    if(pool.length>=12)break;
+                }
+                if(!pool.length)throw Error('No nonadult '+kind+' test candidate');
+                picks[kind==='series'?'episode':kind]=pool.slice(0,12);
             }
             return picks;
         """,arguments:["provider":provider],in:nil,contentWorld:.page)
@@ -64,7 +71,12 @@ final class PlaybackTests: XCTestCase {
             print("Integration stage: playback candidate", kind)
             var played = false
             for item in rows {
+                if let url = item["url"] as? String, let parsed = URL(string: url) {
+                    print("Integration candidate extension", kind, parsed.pathExtension)
+                }
                 _ = try await web.callAsyncJavaScript("""
+                    document.querySelector('#playing-name').textContent=item.name;
+                    document.querySelector('#red-player-description')?.remove();
                     const v=window.__testMedia,player=document.querySelector('#player');if(!v.parentNode)player.prepend(v);
                     v.pause();v.replaceChildren();v.removeAttribute('src');v.load();
                     player.hidden=false;player.dataset.playbackKind=kind==='live'?'live':'vod';
@@ -72,11 +84,14 @@ final class PlaybackTests: XCTestCase {
                     v.appendChild(s);v.load();try{await Promise.race([v.play(),new Promise((_,reject)=>setTimeout(()=>reject(Error("Playback start timeout")),12000))]);}catch(e){return false;}return true;
                 """,arguments:["item":item,"kind":kind],in:nil,contentWorld:.page)
                 var start: Double?
-                for _ in 0..<200 {
-                    let result = try? await web.evaluateJavaScript("JSON.stringify({time:document.querySelector('#video').currentTime,width:document.querySelector('#video').videoWidth,height:document.querySelector('#video').videoHeight,ready:document.querySelector('#video').readyState})")
-                    if let text = result as? String, let data = text.data(using:.utf8), let info = try? JSONSerialization.jsonObject(with:data) as? [String:Any], let time = info["time"] as? Double, (info["width"] as? Int ?? 0)>0, (info["ready"] as? Int ?? 0)>=3 {
+                for _ in 0..<100 {
+                    let result = try? await web.evaluateJavaScript("JSON.stringify({time:document.querySelector('#video').currentTime,width:document.querySelector('#video').videoWidth,height:document.querySelector('#video').videoHeight,ready:document.querySelector('#video').readyState,error:!!document.querySelector('#video').error})")
+                    if let text = result as? String, let data = text.data(using:.utf8), let info = try? JSONSerialization.jsonObject(with:data) as? [String:Any] {
+                        if info["error"] as? Bool == true { break }
+                        if let time = info["time"] as? Double, (info["width"] as? Int ?? 0)>0, (info["ready"] as? Int ?? 0)>=3 {
                         if start == nil { start=time }
                         if time-(start ?? time)>2 { played=true;break }
+                        }
                     }
                     try await Task.sleep(nanoseconds:250_000_000)
                 }
@@ -84,7 +99,7 @@ final class PlaybackTests: XCTestCase {
             }
             XCTAssertTrue(played,"Real provider \(kind) must decode video frames and advance >2 seconds")
             let shot = UIGraphicsImageRenderer(bounds:window.bounds).image { _ in window.drawHierarchy(in:window.bounds,afterScreenUpdates:true) }
-            let a=XCTAttachment(image:shot);a.name="real-\(kind)-advancing";a.lifetime = .keepAlways;add(a)
+            let a=XCTAttachment(image:shot);a.name="real-\(kind)-\(played ? "advancing" : "FAILED")";a.lifetime = .keepAlways;add(a)
             print("Real media frame advancement",kind,played)
             _ = try await web.evaluateJavaScript("document.querySelector('#video').pause();document.querySelector('#video').replaceChildren();document.querySelector('#video').load()")
         }
