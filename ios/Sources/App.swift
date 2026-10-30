@@ -87,9 +87,12 @@ final class PlayerController: UIViewController, WKNavigationDelegate, WKScriptMe
         session.dataTask(with: req) { data, response, error in
             DispatchQueue.main.async {
                 if let error = error { replyHandler(nil,error.localizedDescription); return }
-                guard let data = data, data.count <= 64 * 1024 * 1024,
-                      let response = response as? HTTPURLResponse else {
-                    replyHandler(nil,"Response too large or invalid"); return
+                guard let response = response as? HTTPURLResponse else {
+                    replyHandler(nil,"Native HTTP response missing"); return
+                }
+                let data = data ?? Data()
+                guard data.count <= 128 * 1024 * 1024 else {
+                    replyHandler(nil,"Native HTTP response exceeds 128 MiB (" + String(data.count) + " bytes)"); return
                 }
                 var headers: [String:String] = [:]
                 for (key,value) in response.allHeaderFields {
