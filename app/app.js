@@ -89,7 +89,7 @@ async function sync(){
 if(state.panelBusy||Date.now()<panelRetryAt)return;state.panelBusy=true;$('sync').disabled=true;$('activation').textContent=tr('جارٍ التحقق من التفعيل…');
 try{
 var binding={p_device_code:code,p_device_token:deviceIdentity.token};
-var registration=await rpc('register_device_v2',Object.assign({p_app_type:'alaa_player',p_model:window.APTouch?'iPhone · Alaa Player 2.4':'LG webOS · Alaa Player 2.4'},binding));
+var registration=await rpc('register_device_v2',Object.assign({p_app_type:'alaa_player',p_model:window.APTouch?'iPhone · Alaa Player 2.5':'LG webOS · Alaa Player 2.5'},binding));
 if(registration.status==='rate_limited'){panelRetryAt=Date.now()+Math.max(60,Number(registration.retry_after)||3600)*1000+Math.random()*3000;return;}
 if(['registered','unavailable'].indexOf(registration.status)<0)throw Error('Pairing unavailable');
 var raw=await rpc('get_device_config_v2',binding);
@@ -226,7 +226,7 @@ function itemAllowed(item,p){if(!p||p.type!=='xtream')return true;var kind=item.
 async function xc(p,action,id,prefetch,forceJob){
 var generation=providerGeneration,media=/live/.test(action)?'live':/vod/.test(action)?'movies':'series',isCategories=/_categories$/.test(action),isList=/^(get_live_streams|get_vod_streams|get_series)$/.test(action);
 function check(){if(generation!==providerGeneration||state.provider!==p)throw Error('Stale catalog');if(p.type==='xtream'&&!p.manual&&!p._policy)throw Error('Unsupported category policy');if(isList&&!A.categoryAllowed(p,media,id))throw Error('Hidden category');if(/_info$/.test(action)){var item=(homeCatalog[media]||[]).concat(homeInline.items||[],movieRelated||[],state.items||[]).find(function(i){return String(i.id)===String(id);});if(!item||!itemAllowed(item,p))throw Error('Hidden item');}}
-function filtered(data){check();if(isCategories)return data.filter(function(x){return A.categoryAllowed(p,media,x.category_id);});if(isList)return A.visibleRows(p,media,data);return data;}
+function filtered(data){check();if((isCategories||isList)&&data&&typeof data==='object'&&!Array.isArray(data)&&Object.keys(data).length===0)data=[];if((isCategories||isList)&&!Array.isArray(data))throw Error('Invalid catalogue');if(isCategories)return data.filter(function(x){return A.categoryAllowed(p,media,x.category_id);});if(isList)return A.visibleRows(p,media,data);return data;}
 check();var k=await catalogKey(p,action,id),cached=await cacheRead(k);
 function refresh(){if(k&&cacheJobs[k])return cacheJobs[k];
 var task=(async function(){check();var data=JSON.parse(await request(catalogURL(p,action,id),null,24*1024*1024));
@@ -1020,7 +1020,7 @@ function activateEpisode(e){
  if(episodePresentation&&state.playing&&key(state.playing)===id&&$('player').dataset.playbackKind==='episode'){
   episodePresentation.scroll=$('episode-list').scrollTop;setEpisodeFullscreen(true);return;
  }
- var scroll=$('episode-list').scrollTop;play(e);episodePresentation={id:id,full:false,scroll:scroll,season:seriesSeason};$('player').dataset.playbackKind='episode';setEpisodeFullscreen(false);
+ var scroll=$('episode-list').scrollTop;play(e);episodePresentation={id:id,full:false,scroll:scroll,season:seriesSeason};$('player').dataset.playbackKind='episode';setEpisodeFullscreen(!!window.APTouch);
 }
 function focusSeriesEpisode(id){
  var n=episodeWindow.items.findIndex(function(ep){return key(ep)===id;});

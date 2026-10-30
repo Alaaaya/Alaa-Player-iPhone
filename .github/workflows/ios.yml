@@ -29,6 +29,11 @@ jobs:
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import sys,json; d=json.load(sys.stdin); print(next(x["udid"] for a in d["devices"].values() for x in a if x["name"].startswith("iPhone")))')
           xcodebuild -project AlaaPlayer.xcodeproj -scheme AlaaPlayer -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath sim-build CODE_SIGNING_ALLOWED=NO test > /tmp/native-test.log 2>&1 || { tail -100 /tmp/native-test.log; exit 1; }
           grep -E "Test Case .* (passed|failed)|Executed" /tmp/native-test.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: simulator-evidence
+          path: ios/sim-build/Logs/Test/*.xcresult
       - name: Build unsigned device app
         run: |
           cd ios
@@ -39,8 +44,8 @@ jobs:
           test -f Payload/AlaaPlayer.app/www/index.html
           test -f Payload/AlaaPlayer.app/AlaaPlayer
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Payload/AlaaPlayer.app/Info.plist
-          ditto -c -k --sequesterRsrc --keepParent Payload ../Alaa-Player-2.4-unsigned.ipa
+          ditto -c -k --sequesterRsrc --keepParent Payload ../Alaa-Player-2.5-unsigned.ipa
       - uses: actions/upload-artifact@v4
         with:
-          name: Alaa-Player-2.4-unsigned
-          path: Alaa-Player-2.4-unsigned.ipa
+          name: Alaa-Player-2.5-unsigned
+          path: Alaa-Player-2.5-unsigned.ipa
