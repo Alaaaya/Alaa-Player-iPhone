@@ -89,7 +89,7 @@ async function sync(){
 if(state.panelBusy||Date.now()<panelRetryAt)return;state.panelBusy=true;$('sync').disabled=true;$('activation').textContent=tr('جارٍ التحقق من التفعيل…');
 try{
 var binding={p_device_code:code,p_device_token:deviceIdentity.token};
-var registration=await rpc('register_device_v2',Object.assign({p_app_type:'alaa_player',p_model:window.APTouch?'iPhone · Alaa Player 2.6.8':'LG webOS · Alaa Player 2.6.8'},binding));
+var registration=await rpc('register_device_v2',Object.assign({p_app_type:'alaa_player',p_model:window.APTouch?'iPhone · Alaa Player 2.6.9':'LG webOS · Alaa Player 2.6.9'},binding));
 if(registration.status==='rate_limited'){panelRetryAt=Date.now()+Math.max(60,Number(registration.retry_after)||3600)*1000+Math.random()*3000;return;}
 if(['registered','unavailable'].indexOf(registration.status)<0)throw Error('Pairing unavailable');
 var raw=await rpc('get_device_config_v2',binding);
@@ -354,14 +354,22 @@ var all=[],complete=true;
 for(var n=0;n<cats.length;n++){var record=await cacheRead(await catalogKey(p,'get_live_streams',cats[n].category_id));if(!record){complete=false;break;}all=all.concat(A.visibleRows(p,'live',record.data));}
 if(complete&&cats.length)return A.xcItems(all,cats,p,kind);
 }
-if(category==='All'){var rows=[];for(var j=0;j<cats.length;j++)rows=rows.concat(await xc(p,'get_live_streams',cats[j].category_id));return A.xcItems(rows,cats,p,kind);}
+if(category==='All'){var full=await xc(p,'get_live_streams').catch(function(){return null;});if(Array.isArray(full)&&full.length)return A.xcItems(full,cats,p,kind);var rows=[];for(var j=0;j<cats.length;j++)rows=rows.concat(await xc(p,'get_live_streams',cats[j].category_id));return A.xcItems(rows,cats,p,kind);}
 return A.xcItems(await xc(p,'get_live_streams',category),cats,p,kind);
 }
 var cats=vodCategories[kind];
 if(!cats.length){cats=await xc(p,'get_'+mode+'_categories');vodCategories[kind]=cats;}
 if(!cats.length)return [];
-var chosen=category||cats[0].category_id;
-var choices=category?[{category_id:category}]:cats;
+var action=kind==='series'?'get_series':'get_vod_streams';
+if(!category||category==='All'){
+// "All categories" means every title: ask the provider for the full list, fall back to every category one by one.
+var everything=await xc(p,action).catch(function(){return null;});
+if(Array.isArray(everything)&&everything.length)return A.xcItems(everything,cats,p,kind);
+var merged=[];for(var m=0;m<cats.length;m++){var part=await xc(p,action,cats[m].category_id).catch(function(){return [];});if(Array.isArray(part))merged=merged.concat(part);}
+return A.xcItems(merged,cats,p,kind);
+}
+var chosen=category;
+var choices=[{category_id:category}];
 for(var c=0;c<choices.length;c++){
 var rows=await xc(p,kind==='series'?'get_series':'get_vod_streams',choices[c].category_id);
 if(!Array.isArray(rows))throw Error('Invalid catalogue');
@@ -371,7 +379,7 @@ return [];
 }
 async function loadVodCategory(name){
 var cat=(state.kind==='live'?liveCategories:vodCategories[state.kind]).find(function(c){return c.category_name===name;});
-if(!cat&&!(state.kind==='live'&&name==='All'))return;
+if(!cat&&name!=='All')return;
 var kind=state.kind,token=++state.request;status(tr('جارٍ تحميل القسم…'));
 try{var rows=await xcCatalog(state.provider,kind,cat?cat.category_id:'All');
 if(token!==state.request)return;state.items=uniqueTitles(rows);homeCatalog[kind]=state.items;state.group=name;render();focusFirst();status('');
@@ -651,7 +659,16 @@ $('latest-heading').textContent=tr('جميع الأفلام')+(state.group==='Al
 }
 var focusDetailTimer;
 function redLayout(){return (document.body.dataset.theme==='red'||(document.body.dataset.theme==='aya'||document.body.dataset.theme==='alaa'||document.body.dataset.theme==='harak'||document.body.dataset.theme==='muse'||document.body.dataset.theme==='velour'))&&window.APRed?window.APRed.layout():null;}
-function gridSpec(){if(window.APTouch)return {cols:innerWidth<600?2:4,row:260,page:32};var L=state.kind!=='live'&&!state.episodes?redLayout():null;return L?L.grid:{cols:6,row:350,page:24};}
+function touchGridSpec(){
+// Phone grid follows the real CSS layout: column count from the grid, row height from the tile itself, so rows sit tight with no empty band.
+var el=$('items'),cs=getComputedStyle(el),cols=(cs.gridTemplateColumns||'').split(' ').filter(function(x){return x&&x!=='none';}).length||(innerWidth<600?2:5);
+var gap=parseFloat(cs.rowGap)||0,first=el.querySelector('button'),tile=first?first.getBoundingClientRect().height:0;
+if(!tile){var colGap=parseFloat(cs.columnGap)||0,w=(el.clientWidth-(cols-1)*colGap)/cols;tile=Math.round(w*1.5+34);}
+tile=Math.max(80,Math.ceil(tile));
+if(el.dataset.apRow!==String(tile)){el.dataset.apRow=String(tile);el.style.setProperty('grid-auto-rows',tile+'px','important');}
+return {cols:cols,row:tile+gap,page:Math.max(32,cols*8)};
+}
+function gridSpec(){if(window.APTouch)return touchGridSpec();var L=state.kind!=='live'&&!state.episodes?redLayout():null;return L?L.grid:{cols:6,row:350,page:24};}
 function episodeCols(){var L=redLayout();return L?L.episodes.cols:5;}
 function renderWindow(start){
 var el=$('items'),rowHeight=window.APTouch&&state.kind==='live'?68:state.kind==='live'?(document.body.dataset.theme==='velour'?(document.body.dataset.channelSize==='large'?138:document.body.dataset.channelSize==='medium'?118:98):93):158;var G=state.kind!=='live'&&!state.episodes?gridSpec():null,cols=G?G.cols:1;start=Math.floor(start/cols)*cols;var ps=G?G.page:pageSize;rowHeight=G?G.row:rowHeight;state.virtualStart=start;el.replaceChildren();
