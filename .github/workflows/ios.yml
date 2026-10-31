@@ -61,8 +61,8 @@ jobs:
           test -f Payload/AlaaPlayer.app/www/index.html
           test -f Payload/AlaaPlayer.app/AlaaPlayer
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Payload/AlaaPlayer.app/Info.plist
-          ditto -c -k --sequesterRsrc --keepParent Payload ../Alaa-Player-2.7.0-unsigned.ipa
+          ditto -c -k --sequesterRsrc --keepParent Payload ../Alaa-Player-2.7.1-unsigned.ipa
       - uses: actions/upload-artifact@v4
         with:
-          name: Alaa-Player-2.7.0-unsigned
-          path: Alaa-Player-2.7.0-unsigned.ipa
+          name: Alaa-Player-2.7.1-unsigned
+          path: Alaa-Player-2.7.1-unsigned.ipa
