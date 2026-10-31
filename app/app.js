@@ -89,7 +89,7 @@ async function sync(){
 if(state.panelBusy||Date.now()<panelRetryAt)return;state.panelBusy=true;$('sync').disabled=true;$('activation').textContent=tr('جارٍ التحقق من التفعيل…');
 try{
 var binding={p_device_code:code,p_device_token:deviceIdentity.token};
-var registration=await rpc('register_device_v2',Object.assign({p_app_type:'alaa_player',p_model:window.APTouch?'iPhone · Alaa Player 2.7.0':'LG webOS · Alaa Player 2.7.0'},binding));
+var registration=await rpc('register_device_v2',Object.assign({p_app_type:'alaa_player',p_model:window.APTouch?'iPhone · Alaa Player 2.7.1':'LG webOS · Alaa Player 2.7.1'},binding));
 if(registration.status==='rate_limited'){panelRetryAt=Date.now()+Math.max(60,Number(registration.retry_after)||3600)*1000+Math.random()*3000;return;}
 if(['registered','unavailable'].indexOf(registration.status)<0)throw Error('Pairing unavailable');
 var raw=await rpc('get_device_config_v2',binding);
@@ -599,19 +599,21 @@ function posterMetadata(i){return [i.year&&/^\d{4}$/.test(String(i.year))?i.year
 window.APPosterDisplay={title:posterTitle,metadata:posterMetadata};
 function metadata(item){return [item.year,item.seasons?item.seasons+tr(' مواسم'):'',item.episodeCount?item.episodeCount+tr(' حلقات'):'',item.rating?'★ '+item.rating:'',item.quality].filter(Boolean).join('  ·  ');}
 
-var categoryWindow={nodes:[],start:0};
+var categoryWindow={nodes:[],start:0,pitch:66};
+// Category rows are virtualised; the phone layout makes them taller than on TV, so measure the real row step instead of assuming 66px.
+function categoryPitch(){var n=categoryWindow.nodes,a=n[0],b=n[1];if(a&&b&&a.isConnected&&b.isConnected){var d=b.getBoundingClientRect().top-a.getBoundingClientRect().top;if(d>20&&d<400)categoryWindow.pitch=d;}else if(window.APTouch&&a&&a.isConnected){var h=a.getBoundingClientRect().height;if(h>20)categoryWindow.pitch=h+8;}return categoryWindow.pitch;}
 function paintCategoryWindow(start){
 var cat=$('categories'),nodes=categoryWindow.nodes;
 start=Math.max(0,Math.min(start,Math.max(0,nodes.length-20)));categoryWindow.start=start;
 var top=cat.scrollTop;cat.replaceChildren();
-function pad(h){var d=document.createElement('div');d.style.height=h+'px';d.className='category-space';cat.appendChild(d);}
-pad(start*66);nodes.slice(start,start+20).forEach(function(b){cat.appendChild(b);});pad(Math.max(0,nodes.length-start-20)*66);cat.scrollTop=top;
+function pad(h){var d=document.createElement('div');d.style.height=h+'px';d.style.flex='0 0 auto';d.style.minHeight=h+'px';d.className='category-space';cat.appendChild(d);}
+var P=categoryWindow.pitch;pad(start*P);nodes.slice(start,start+20).forEach(function(b){cat.appendChild(b);});pad(Math.max(0,nodes.length-start-20)*P);var M=categoryPitch();if(Math.abs(M-P)>1){[[cat.firstChild,start*M],[cat.lastChild,Math.max(0,nodes.length-start-20)*M]].forEach(function(x){x[0].style.height=x[0].style.minHeight=x[1]+'px';});}cat.scrollTop=top;
 }
 function installCategoryWindow(nodes){categoryWindow.nodes=nodes;nodes.forEach(function(b,i){b.dataset.categoryIndex=i;});
 var selected=nodes.findIndex(function(b){return b.classList.contains('selected');});paintCategoryWindow(Math.max(0,selected-3));}
 $('categories').addEventListener('scroll',function(){
-if($('categories').contains(document.activeElement))return;
-var start=Math.max(0,Math.floor($('categories').scrollTop/66)-2);if(start!==categoryWindow.start)paintCategoryWindow(start);
+if(!window.APTouch&&$('categories').contains(document.activeElement))return;
+var start=Math.max(0,Math.floor($('categories').scrollTop/categoryWindow.pitch)-2);if(start!==categoryWindow.start)paintCategoryWindow(start);
 });
 function renderItems(){
 fPaintNew();
