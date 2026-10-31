@@ -89,7 +89,7 @@ async function sync(){
 if(state.panelBusy||Date.now()<panelRetryAt)return;state.panelBusy=true;$('sync').disabled=true;$('activation').textContent=tr('جارٍ التحقق من التفعيل…');
 try{
 var binding={p_device_code:code,p_device_token:deviceIdentity.token};
-var registration=await rpc('register_device_v2',Object.assign({p_app_type:'alaa_player',p_model:window.APTouch?'iPhone · Alaa Player 2.6.9':'LG webOS · Alaa Player 2.6.9'},binding));
+var registration=await rpc('register_device_v2',Object.assign({p_app_type:'alaa_player',p_model:window.APTouch?'iPhone · Alaa Player 2.7.0':'LG webOS · Alaa Player 2.7.0'},binding));
 if(registration.status==='rate_limited'){panelRetryAt=Date.now()+Math.max(60,Number(registration.retry_after)||3600)*1000+Math.random()*3000;return;}
 if(['registered','unavailable'].indexOf(registration.status)<0)throw Error('Pairing unavailable');
 var raw=await rpc('get_device_config_v2',binding);
@@ -268,7 +268,7 @@ var d=cached.data;
 function fat(list,kind){return (list||[]).map(function(i){var o=Object.assign({name:'Untitled',group:'Other',logo:null,rating:'',year:'',description:'',genre:'',seasons:'',episodeCount:'',added:0,quality:'',program:'',backdrop:null},i);o.kind=kind;o.provider=p;if(kind==='live'&&p.type==='xtream')o.url=A.xcStream(p,'live',o.id,'m3u8');return o;}).filter(function(i){return itemAllowed(i,p);});}
 homeCatalog={live:fat(d.catalog.live,'live'),movies:fat(d.catalog.movies,'movies'),series:fat(d.catalog.series,'series')};liveCategories=d.categories.live||[];vodCategories={movies:d.categories.movies||[],series:d.categories.series||[]};
 homeLoadState={movies:d.loadState.movies==='ready'?'ready':'idle',series:d.loadState.series==='ready'?'ready':'idle'};
-state.items=homeCatalog[state.kind]||[];state.group=state.items.length&&state.kind==='live'?state.items[0].group:'All';
+state.items=homeCatalog[state.kind]||[];state.group='All';
 catalogReady=homeLoadState.movies==='ready'&&homeLoadState.series==='ready';
 return true;
 }
@@ -347,7 +347,7 @@ if(kind==='live'){
 var cats=await xc(p,'get_live_categories').catch(function(){return [];});
 var firstCategories=!liveCategories.length;liveCategories=cats;
 if(firstCategories&&state.provider===p&&state.kind==='live')render();
-if(!category)category=cats.length?cats[0].category_id:null;
+if(!category)category=cats.length?'All':null;
 if(!category)return [];
 if(category==='All'){
 var all=[],complete=true;
@@ -399,7 +399,7 @@ async function load(){
 var p=state.provider,version=++state.request;state.selected=null;state.group='All';state.page=0;$('search').value='';state.items=homeCatalog[state.kind]||[];render();if(!p)return;status(tr('جارٍ تحميل ')+(p.name||tr('القائمة'))+'…');
 try{var list=[];if(p.type==='m3u'){list=A.parseM3U(await request(p.url,null,24*1024*1024),p.url).filter(function(i){return i.kind===state.kind;});}
 else{list=await xcCatalog(p,state.kind);}
-if(version!==state.request)return;list=uniqueTitles(list);if(state.kind==='live'&&p.type==='xtream'&&list.length)state.group=list[0].group;state.items=list;homeCatalog[state.kind]=list;if(state.kind!=='live')homeLoadState[state.kind]='ready';render();saveHomeSnapshot(p);loadHomeCatalog(p);status(tr('تم تحميل ')+list.length+tr(' عنوان')+(p.type==='m3u'&&state.kind!=='live'?tr(' · عناصر M3U متاحة ضمن البث المباشر'):''));focusFirst();flushFeatured();
+if(version!==state.request)return;list=uniqueTitles(list);state.items=list;homeCatalog[state.kind]=list;if(state.kind!=='live')homeLoadState[state.kind]='ready';render();saveHomeSnapshot(p);loadHomeCatalog(p);status(tr('تم تحميل ')+list.length+tr(' عنوان')+(p.type==='m3u'&&state.kind!=='live'?tr(' · عناصر M3U متاحة ضمن البث المباشر'):''));focusFirst();flushFeatured();
 }catch(e){if(version!==state.request)return;if(!state.items.length&&state.kind!=='live')homeLoadState[state.kind]='error';render();status(errorMessage(e));}}
 function button(text,fn){var b=document.createElement('button');b.textContent=text;b.onclick=fn;return b;}
 function displayLabel(name){return String(name||'').normalize('NFKC').replace(/\s+/g,' ').trim();}

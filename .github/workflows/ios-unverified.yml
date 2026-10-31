@@ -28,8 +28,8 @@ jobs:
           cp -R build/Build/Products/Release-iphoneos/AlaaPlayer.app Payload/
           test -f Payload/AlaaPlayer.app/www/index.html
           test -f Payload/AlaaPlayer.app/AlaaPlayer
-          ditto -c -k --sequesterRsrc --keepParent Payload ../Alaa-Player-2.6.9-unsigned.ipa
+          ditto -c -k --sequesterRsrc --keepParent Payload ../Alaa-Player-2.7.0-unsigned.ipa
       - uses: actions/upload-artifact@v4
         with:
-          name: Alaa-Player-2.6.9-UNVERIFIED-unsigned
-          path: Alaa-Player-2.6.9-unsigned.ipa
+          name: Alaa-Player-2.7.0-UNVERIFIED-unsigned
+          path: Alaa-Player-2.7.0-unsigned.ipa
