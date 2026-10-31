@@ -38,8 +38,8 @@ targets:
         PRODUCT_NAME: AlaaPlayer
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MARKETING_VERSION: "2.6.8"
-        CURRENT_PROJECT_VERSION: "268"
+        MARKETING_VERSION: "2.6.9"
+        CURRENT_PROJECT_VERSION: "269"
     info:
       path: Info.plist
       properties:
@@ -49,8 +49,8 @@ targets:
         UIStatusBarHidden: true
         UIBackgroundModes:
           - audio
-        CFBundleShortVersionString: "2.6.8"
-        CFBundleVersion: "268"
+        CFBundleShortVersionString: "2.6.9"
+        CFBundleVersion: "269"
         UILaunchScreen: {}
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
