@@ -1,7 +1,7 @@
-name: Build TikTokGlass
+name: Build Alaa_TikTok
 on:
   push:
-    branches: [tiktok-glass]
+    branches: [main, tiktok-glass]
   workflow_dispatch:
 permissions:
   contents: write
@@ -24,16 +24,16 @@ jobs:
           gmake package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
           mkdir -p out
           cp packages/*.deb out/
-          cp .theos/obj/TikTokGlass.dylib out/ || find .theos -name 'TikTokGlass.dylib' -exec cp {} out/ \;
+          cp .theos/obj/Alaa_TikTok.dylib out/ || find .theos -name 'Alaa_TikTok.dylib' -exec cp {} out/ \;
           ls -la out
       - uses: actions/upload-artifact@v4
         with:
-          name: TikTokGlass
+          name: Alaa_TikTok
           path: out/
-      - name: Publish build to tiktok-glass-out branch
+      - name: Publish build to builds branch
         run: |
           cd out
-          git init -q -b tiktok-glass-out
+          git init -q -b builds
           git add -A
           git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "build ${{ github.sha }}"
-          git push -f https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git tiktok-glass-out
+          git push -f https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git builds

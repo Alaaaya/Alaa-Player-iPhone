@@ -4,10 +4,10 @@ INSTALL_TARGET_PROCESSES = TikTok
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = TikTokGlass
-TikTokGlass_FILES = Tweak.x
-TikTokGlass_CFLAGS = -fobjc-arc -Wno-unguarded-availability-new -Wno-deprecated-declarations
-TikTokGlass_FRAMEWORKS = UIKit QuartzCore
-TikTokGlass_LOGOS_DEFAULT_GENERATOR = internal
+TWEAK_NAME = Alaa_TikTok
+Alaa_TikTok_FILES = Tweak.x
+Alaa_TikTok_CFLAGS = -fobjc-arc -Wno-unguarded-availability-new -Wno-deprecated-declarations
+Alaa_TikTok_FRAMEWORKS = UIKit QuartzCore AVFoundation MetalKit
+Alaa_TikTok_LOGOS_DEFAULT_GENERATOR = internal
 
 include $(THEOS_MAKE_PATH)/tweak.mk

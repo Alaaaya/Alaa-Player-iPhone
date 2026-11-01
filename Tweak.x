@@ -3,6 +3,7 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import <AVFoundation/AVFoundation.h>
+#import <MetalKit/MetalKit.h>
 static char kBtnsKey;
 
 static const NSInteger kGlassTag = 0x61A55;
@@ -413,4 +414,41 @@ static void TTGFillFeed(UIView *v, CGFloat barTop, CGFloat fullH, int d) {
     root.backgroundColor = UIColor.clearColor;
     [root bringSubviewToFront:barHost];
 }
+%end
+
+// ---- 1.7: stretch the feed player into the area under the floating bar ----
+static CGFloat TTGBarH(void) { return 83.0; }
+static CGRect TTGStretch(UIView *v, CGRect f) {
+    if (!TTGEnabled() || !TTGUnder()) return f;
+    CGFloat full = UIScreen.mainScreen.bounds.size.height;
+    CGFloat barTop = full - TTGBarH();
+    if (fabs(f.size.height - barTop) < 4) f.size.height = full;
+    return f;
+}
+static void TTGUnclip(UIView *v) {
+    CGFloat full = UIScreen.mainScreen.bounds.size.height;
+    for (UIView *p = v.superview; p; p = p.superview) {
+        if (p.bounds.size.height >= full - 4) break;
+        if (p.clipsToBounds) p.clipsToBounds = NO;
+    }
+}
+
+%hook AWEPlayVideoPlayerControllerBackgroundView
+- (void)setFrame:(CGRect)f { %orig(TTGStretch(self, f)); }
+- (void)layoutSubviews { %orig; if (TTGEnabled() && TTGUnder()) TTGUnclip(self); }
+%end
+%hook TTKFeedPlayerContainerView
+- (void)setFrame:(CGRect)f { %orig(TTGStretch(self, f)); }
+%end
+%hook TTPlayerView
+- (void)setFrame:(CGRect)f { %orig(TTGStretch(self, f)); }
+%end
+%hook TTMetalView
+- (void)setFrame:(CGRect)f { %orig(TTGStretch(self, f)); }
+%end
+%hook MTKView
+- (void)setFrame:(CGRect)f { if ([self.superview isKindOfClass:NSClassFromString(@"TTMetalView")]) %orig(TTGStretch(self, f)); else %orig; }
+%end
+%hook TTKMediaBusinessCoverImageView
+- (void)setFrame:(CGRect)f { %orig(TTGStretch(self, f)); }
 %end
