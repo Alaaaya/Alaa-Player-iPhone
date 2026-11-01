@@ -31,6 +31,17 @@ static void TTGRefreshAll(void);
 - (void)ttg_reopen;
 @end
 
+static void TTGCapsule(UIView *v, BOOL on) {
+    if (!on || ![v respondsToSelector:NSSelectorFromString(@"setCornerConfiguration:")]) return;
+    Class cc = NSClassFromString(@"UICornerConfiguration");
+    id cfg = nil;
+    for (NSString *n in @[@"capsuleConfiguration", @"capsule"]) {
+        SEL sl = NSSelectorFromString(n);
+        if ([cc respondsToSelector:sl]) { cfg = ((id (*)(id, SEL))objc_msgSend)(cc, sl); break; }
+    }
+    if (cfg) ((void (*)(id, SEL, id))objc_msgSend)(v, NSSelectorFromString(@"setCornerConfiguration:"), cfg);
+}
+
 static UIVisualEffect *TTGEffect(void) {
     NSInteger st = TTGStyle();
     if (st == 1) return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialDark];
@@ -39,7 +50,7 @@ static UIVisualEffect *TTGEffect(void) {
     if (glassCls) {
         id e = [[glassCls alloc] init];
         if ([e respondsToSelector:@selector(setTintColor:)])
-            ((void (*)(id, SEL, id))objc_msgSend)(e, @selector(setTintColor:), [UIColor colorWithWhite:0.12 alpha:0.22]);
+            ((void (*)(id, SEL, id))objc_msgSend)(e, @selector(setTintColor:), [UIColor colorWithWhite:0 alpha:0.08]);
         if ([e respondsToSelector:@selector(setInteractive:)])
             ((void (*)(id, SEL, BOOL))objc_msgSend)(e, @selector(setInteractive:), YES);
         return e;
@@ -288,7 +299,7 @@ static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, i
         glass = [[UIVisualEffectView alloc] initWithEffect:TTGEffect()];
         glass.tag = kGlassTag;
         glass.userInteractionEnabled = NO;
-        glass.clipsToBounds = YES;
+        glass.clipsToBounds = (TTGStyle() != 0 || !NSClassFromString(@"UIGlassEffect"));
         glass.overrideUserInterfaceStyle = (TTGStyle() == 2) ? UIUserInterfaceStyleLight : UIUserInterfaceStyleDark;
         glass.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.14].CGColor;
         [self insertSubview:glass atIndex:0];
@@ -298,6 +309,8 @@ static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, i
     glass.frame = pill;
     glass.layer.cornerRadius = TTGFloating() ? pill.size.height / 2 : 0;
     glass.layer.cornerCurve = kCACornerCurveContinuous;
+    TTGCapsule(glass, TTGFloating());
+    if (TTGStyle() == 0 && NSClassFromString(@"UIGlassEffect")) glass.layer.borderWidth = 0;
     glass.layer.borderWidth = TTGFloating() ? 0.6 : 0;
 
     // Instagram-style layout: move buttons into the pill with transforms (TikTok re-lays frames, not transforms).
@@ -320,10 +333,18 @@ static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, i
     // highlight capsule behind the selected tab
     UIView *sel = [self viewWithTag:kSelTag];
     if (!sel) {
-        sel = [UIView new];
+        Class gc = NSClassFromString(@"UIGlassEffect");
+        if (gc && TTGStyle() == 0) {
+            id ge = [gc respondsToSelector:@selector(effectWithStyle:)] ? ((id (*)(id, SEL, NSInteger))objc_msgSend)(gc, @selector(effectWithStyle:), 1) : [[gc alloc] init];
+            if ([ge respondsToSelector:@selector(setTintColor:)])
+                ((void (*)(id, SEL, id))objc_msgSend)(ge, @selector(setTintColor:), [UIColor colorWithWhite:1 alpha:0.10]);
+            sel = [[UIVisualEffectView alloc] initWithEffect:ge];
+        } else {
+            sel = [UIView new];
+            sel.backgroundColor = [UIColor colorWithWhite:1 alpha:0.16];
+        }
         sel.tag = kSelTag;
         sel.userInteractionEnabled = NO;
-        sel.backgroundColor = [UIColor colorWithWhite:1 alpha:0.16];
         [self insertSubview:sel aboveSubview:glass];
     }
     NSInteger selIdx = -1;
@@ -335,6 +356,8 @@ static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, i
         CGPoint tc = [targets[selIdx] CGPointValue];
         sel.frame = CGRectMake(tc.x - sw / 2, pill.origin.y + 5, sw, sh);
         sel.layer.cornerRadius = sh / 2;
+        sel.layer.cornerCurve = kCACornerCurveContinuous;
+        TTGCapsule(sel, YES);
         sel.hidden = NO;
     } else sel.hidden = YES;
 }
