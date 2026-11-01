@@ -1,6 +1,9 @@
 // Alaa_TikTok - Instagram-style floating glass tab bar for TikTok
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
+#import <objc/runtime.h>
+#import <AVFoundation/AVFoundation.h>
+static char kBtnsKey;
 
 static const NSInteger kGlassTag = 0x61A55;
 static const NSInteger kSelTag   = 0x61A56;
@@ -35,7 +38,7 @@ static UIVisualEffect *TTGEffect(void) {
     if (glassCls) {
         id e = [[glassCls alloc] init];
         if ([e respondsToSelector:@selector(setTintColor:)])
-            ((void (*)(id, SEL, id))objc_msgSend)(e, @selector(setTintColor:), [UIColor colorWithWhite:0.15 alpha:0.35]);
+            ((void (*)(id, SEL, id))objc_msgSend)(e, @selector(setTintColor:), [UIColor colorWithWhite:0.12 alpha:0.22]);
         if ([e respondsToSelector:@selector(setInteractive:)])
             ((void (*)(id, SEL, BOOL))objc_msgSend)(e, @selector(setInteractive:), YES);
         return e;
@@ -173,7 +176,7 @@ static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, i
             if (d > 30 || out.length > 12000) return;
             CGRect r = [v convertRect:v.bounds toView:w];
             BOOL inBar = [v isDescendantOfView:ws];
-            if (r.size.height >= 300 || inBar || d < 3)
+            if (r.size.height >= 300 || inBar || d < 3 || (CGRectGetMaxY(r) > w.bounds.size.height - 220 && r.size.height >= 18 && r.size.width >= 120))
                 [out appendFormat:@"%@%@ %.0f,%.0f %.0fx%.0f%@\n", [@"" stringByPaddingToLength:d withString:@" " startingAtIndex:0],
                     NSStringFromClass(v.class), r.origin.x, r.origin.y, r.size.width, r.size.height, v.hidden ? @" H" : @""];
             for (UIView *s in v.subviews) wdump(s, d + 1);
@@ -185,6 +188,58 @@ static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, i
     [ac addAction:[UIAlertAction actionWithTitle:@"تم" style:UIAlertActionStyleCancel handler:nil]];
     if (ac.popoverPresentationController) { ac.popoverPresentationController.sourceView = self; ac.popoverPresentationController.sourceRect = self.bounds; }
     [top presentViewController:ac animated:YES completion:nil];
+}
+
+- (UIView *)hitTest:(CGPoint)p withEvent:(UIEvent *)e {
+    NSArray *info = objc_getAssociatedObject(self, &kBtnsKey);
+    if (info && TTGEnabled() && !self.hidden && self.alpha > 0.01) {
+        CGRect pill = [info[1] CGRectValue];
+        if (CGRectContainsPoint(CGRectInset(pill, -4, -8), p)) {
+            if (![objc_getAssociatedObject(self, @selector(ttg_tap:)) boolValue]) {
+                UITapGestureRecognizer *tg = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(ttg_tap:)];
+                tg.cancelsTouchesInView = YES;
+                [self addGestureRecognizer:tg];
+                objc_setAssociatedObject(self, @selector(ttg_tap:), @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            }
+            return self;
+        }
+    }
+    return %orig;
+}
+
+%new
+- (void)ttg_tap:(UITapGestureRecognizer *)g {
+    NSArray *info = objc_getAssociatedObject(self, &kBtnsKey);
+    if (!info) return;
+    NSArray<UIView *> *btns = info[0]; CGRect pill = [info[1] CGRectValue];
+    CGFloat x = [g locationInView:self].x;
+    CGFloat slotW = (pill.size.width - 12) / btns.count;
+    NSInteger i = (NSInteger)floor((x - pill.origin.x - 6) / slotW);
+    i = MAX(0, MIN((NSInteger)btns.count - 1, i));
+    UIView *b = btns[i];
+    if ([b isKindOfClass:[UIControl class]]) {
+        UIControl *c = (UIControl *)b;
+        [c sendActionsForControlEvents:UIControlEventTouchDown];
+        [c sendActionsForControlEvents:UIControlEventTouchUpInside];
+    } else {
+        for (UIGestureRecognizer *r in b.gestureRecognizers) {
+            if ([r isKindOfClass:[UITapGestureRecognizer class]]) {
+                @try {
+                    NSArray *targets = [r valueForKey:@"_targets"];
+                    for (id t in targets) {
+                        Ivar it = class_getInstanceVariable([t class], "_target");
+                        Ivar ia = class_getInstanceVariable([t class], "_action");
+                        if (!it || !ia) continue;
+                        id target = object_getIvar(t, it);
+                        SEL act = *(SEL *)((uint8_t *)(__bridge void *)t + ivar_getOffset(ia));
+                        if (target && act) ((void (*)(id, SEL, id))objc_msgSend)(target, act, r);
+                    }
+                } @catch (__unused id ex) {}
+                }
+            }
+        }
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{ [self setNeedsLayout]; });
 }
 
 %new
@@ -255,10 +310,12 @@ static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, i
         if (TTGFloating() && buttons.count >= 3) {
             t = CGPointMake(pill.origin.x + 6 + slotW * (i + 0.5), CGRectGetMidY(pill) + (noLabels ? 8 : 0));
         }
-        b.transform = CGAffineTransformMakeTranslation(t.x - c.x, t.y - c.y);
+        if (!CGAffineTransformIsIdentity(b.transform)) b.transform = CGAffineTransformIdentity;
+        b.layer.sublayerTransform = CATransform3DMakeTranslation(t.x - c.x, t.y - c.y, 0);
         [targets addObject:[NSValue valueWithCGPoint:CGPointMake(t.x, CGRectGetMidY(pill))]];
     }
     for (UIView *b in buttons) TTGSetLabelsHidden(b, noLabels);
+    objc_setAssociatedObject(self, &kBtnsKey, (TTGFloating() && buttons.count >= 3) ? @[[buttons copy], [NSValue valueWithCGRect:pill]] : nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     // highlight capsule behind the selected tab
     UIView *sel = [self viewWithTag:kSelTag];
@@ -274,7 +331,7 @@ static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, i
     if (selIdx < 0 && [self respondsToSelector:@selector(selectedItem)] && self.selectedItem && self.items.count == buttons.count)
         selIdx = [self.items indexOfObject:self.selectedItem];
     if (selIdx >= 0 && selIdx < (NSInteger)targets.count && TTGFloating()) {
-        CGFloat sw = MIN(slotW + 6, 96), sh = pill.size.height - 10;
+        CGFloat sw = MIN(slotW + 4, 92), sh = pill.size.height - 10;
         CGPoint tc = [targets[selIdx] CGPointValue];
         sel.frame = CGRectMake(tc.x - sw / 2, pill.origin.y + 5, sw, sh);
         sel.layer.cornerRadius = sh / 2;
@@ -292,12 +349,20 @@ static void TTGRefreshAll(void) {
     for (UIWindow *w in UIApplication.sharedApplication.windows) TTGRefreshIn(w);
 }
 
+static BOOL TTGIsVideoView(UIView *v) {
+    if ([v.layer isKindOfClass:[AVPlayerLayer class]]) return YES;
+    for (CALayer *l in v.layer.sublayers) if ([l isKindOfClass:[AVPlayerLayer class]]) return YES;
+    NSString *n = NSStringFromClass(v.class).lowercaseString;
+    if ([n containsString:@"interact"] || [n containsString:@"overlay"] || [n containsString:@"control"] || [n containsString:@"mask"]) return NO;
+    return [n containsString:@"player"] || [n containsString:@"video"] || [n containsString:@"cover"] || [n containsString:@"render"] || [v isKindOfClass:[UIImageView class]];
+}
+
 static void TTGFillFeed(UIView *v, CGFloat barTop, CGFloat fullH, int d) {
     if (d > 16) return;
     for (UIView *s in v.subviews) {
         if (s.hidden) continue;
         CGFloat ph = s.superview.bounds.size.height;
-        if (fabs(s.frame.size.height - barTop) < 4 && fabs(s.frame.origin.y) < 2 && ph >= fullH - 4) {
+        if (fabs(s.frame.size.height - barTop) < 4 && fabs(s.frame.origin.y) < 2 && ph >= fullH - 4 && TTGIsVideoView(s)) {
             CGRect f = s.frame; f.size.height = ph; s.frame = f;
         }
         TTGFillFeed(s, barTop, fullH, d + 1);
