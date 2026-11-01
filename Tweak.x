@@ -6,11 +6,13 @@ static const NSInteger kGlassTag = 0x61A55;
 
 #define kPrefEnabled  @"alaa_tt_glass_enabled"
 #define kPrefFloating @"alaa_tt_glass_floating"
+#define kPrefUnder    @"alaa_tt_video_under"
 #define kPrefStyle    @"alaa_tt_glass_style"   // 0 liquid glass, 1 dark blur, 2 light blur
 
 static NSUserDefaults *TTGDefs(void) { return NSUserDefaults.standardUserDefaults; }
 static BOOL TTGEnabled(void)  { id v = [TTGDefs() objectForKey:kPrefEnabled];  return v ? [v boolValue] : YES; }
 static BOOL TTGFloating(void) { id v = [TTGDefs() objectForKey:kPrefFloating]; return v ? [v boolValue] : YES; }
+static BOOL TTGUnder(void)    { id v = [TTGDefs() objectForKey:kPrefUnder];    return v ? [v boolValue] : YES; }
 static NSInteger TTGStyle(void) { return [TTGDefs() integerForKey:kPrefStyle]; }
 static void TTGRefreshAll(void);
 
@@ -28,6 +30,9 @@ static UIVisualEffect *TTGEffect(void) {
     Class glassCls = NSClassFromString(@"UIGlassEffect"); // iOS 26 Liquid Glass
     if (glassCls) {
         id e = [[glassCls alloc] init];
+        if ([e respondsToSelector:@selector(setTintColor:)]) {
+            ((void (*)(id, SEL, id))objc_msgSend)(e, @selector(setTintColor:), [UIColor colorWithWhite:0 alpha:0.35]);
+        }
         if ([e respondsToSelector:@selector(setInteractive:)]) {
             ((void (*)(id, SEL, BOOL))objc_msgSend)(e, @selector(setInteractive:), YES);
         }
@@ -96,6 +101,9 @@ static BOOL TTGIsButton(UIView *v) {
     [ac addAction:[UIAlertAction actionWithTitle:(TTGFloating() ? @"✅ عائم مدوّر" : @"⬜️ عائم مدوّر (هلق: عرض كامل)")
         style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
             [TTGDefs() setBool:!TTGFloating() forKey:kPrefFloating]; TTGRefreshAll(); [weakSelf ttg_longPressReopen]; }]];
+    [ac addAction:[UIAlertAction actionWithTitle:(TTGUnder() ? @"✅ الفيديو تحت الشريط" : @"⬜️ الفيديو تحت الشريط")
+        style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
+            [TTGDefs() setBool:!TTGUnder() forKey:kPrefUnder]; TTGRefreshAll(); [weakSelf ttg_longPressReopen]; }]];
     [ac addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"🎨 النمط: %@", styles[MAX(0, MIN(2, TTGStyle()))]]
         style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
             [TTGDefs() setInteger:(TTGStyle() + 1) % 3 forKey:kPrefStyle];
@@ -138,19 +146,20 @@ static BOOL TTGIsButton(UIView *v) {
     CGFloat bottomInset = self.window ? self.window.safeAreaInsets.bottom : 0;
     CGFloat barH = self.bounds.size.height - bottomInset;
     if (barH < 44) barH = MIN(self.bounds.size.height, 60);
-    CGFloat side = TTGFloating() ? 12 : 0, top = TTGFloating() ? 2 : 0;
+    CGFloat side = TTGFloating() ? 8 : 0, top = TTGFloating() ? 2 : 0;
     CGRect pill = CGRectMake(side, top, self.bounds.size.width - side * 2, barH - top + (bottomInset > 0 ? 8 : -4));
 
     UIVisualEffectView *glass = (UIVisualEffectView *)[self viewWithTag:kGlassTag];
     if (!glass) {
         glass = [[UIVisualEffectView alloc] initWithEffect:TTGEffect()];
         glass.tag = kGlassTag;
+        if (@available(iOS 13.0, *)) glass.overrideUserInterfaceStyle = (TTGStyle() == 2) ? UIUserInterfaceStyleLight : UIUserInterfaceStyleDark;
         glass.userInteractionEnabled = NO;
         glass.clipsToBounds = YES;
         glass.layer.borderWidth = 0.6;
         glass.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.18].CGColor;
         UIView *tint = [[UIView alloc] init];
-        tint.backgroundColor = [UIColor colorWithWhite:1 alpha:0.06];
+        tint.backgroundColor = [UIColor colorWithWhite:0 alpha:(TTGStyle() == 2 ? 0.0 : 0.18)];
         tint.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         [glass.contentView addSubview:tint];
         [self insertSubview:glass atIndex:0];
@@ -180,9 +189,26 @@ static void TTGRefreshAll(void) {
 - (void)viewDidLayoutSubviews {
     %orig;
     UIViewController *vc = (UIViewController *)self;
-    if ([vc respondsToSelector:@selector(tabBar)]) {
-        UITabBar *tb = [(id)vc tabBar];
-        if (TTGEnabled()) tb.superview.backgroundColor = UIColor.clearColor;
+    if (![vc respondsToSelector:@selector(tabBar)]) return;
+    UITabBar *tb = [(id)vc tabBar];
+    if (!tb || !TTGEnabled()) return;
+    UIView *root = vc.view;
+    // the view that holds the tab bar directly under root
+    UIView *barHost = tb;
+    while (barHost.superview && barHost.superview != root) barHost = barHost.superview;
+    barHost.backgroundColor = UIColor.clearColor;
+    tb.superview.backgroundColor = UIColor.clearColor;
+    if (!TTGUnder()) return;
+    CGFloat barTop = [tb convertRect:tb.bounds toView:root].origin.y;
+    CGFloat fullH = root.bounds.size.height;
+    for (UIView *v in root.subviews) {
+        if (v == barHost || v.hidden) continue;
+        CGRect f = v.frame;
+        if (fabs(CGRectGetMaxY(f) - barTop) < 3 && f.size.height > fullH * 0.5) {
+            f.size.height = fullH - f.origin.y;
+            v.frame = f;
+        }
     }
+    [root bringSubviewToFront:barHost];
 }
 %end
