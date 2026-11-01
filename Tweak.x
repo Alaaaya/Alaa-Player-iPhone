@@ -361,8 +361,13 @@ static void TTGFillFeed(UIView *v, CGFloat barTop, CGFloat fullH, int d) {
     for (UIView *s in v.subviews) {
         if (s.hidden) continue;
         CGFloat ph = s.superview.bounds.size.height;
-        if (fabs(s.frame.size.height - barTop) < 4 && fabs(s.frame.origin.y) < 2 && ph >= fullH - 4 && TTGIsVideoView(s)) {
-            CGRect f = s.frame; f.size.height = ph; s.frame = f;
+        BOOL parentOK = ph >= fullH - 4 || fabs(ph - barTop) < 4;
+        if (fabs(s.frame.size.height - barTop) < 4 && fabs(s.frame.origin.y) < 2 && parentOK && TTGIsVideoView(s)) {
+            CGRect f = s.frame; f.size.height = fullH; s.frame = f;
+            for (UIView *p = s.superview; p && p != v.window; p = p.superview) {
+                if (p.bounds.size.height >= fullH - 4) break;
+                p.clipsToBounds = NO;
+            }
         }
         TTGFillFeed(s, barTop, fullH, d + 1);
     }
