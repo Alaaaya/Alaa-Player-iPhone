@@ -235,7 +235,6 @@ static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, i
                         if (target && act) ((void (*)(id, SEL, id))objc_msgSend)(target, act, r);
                     }
                 } @catch (__unused id ex) {}
-                }
             }
         }
     }
