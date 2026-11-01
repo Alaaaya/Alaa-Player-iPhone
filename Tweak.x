@@ -434,21 +434,21 @@ static void TTGUnclip(UIView *v) {
 }
 
 %hook AWEPlayVideoPlayerControllerBackgroundView
-- (void)setFrame:(CGRect)f { %orig(TTGStretch(self, f)); }
-- (void)layoutSubviews { %orig; if (TTGEnabled() && TTGUnder()) TTGUnclip(self); }
+- (void)setFrame:(CGRect)f { %orig(TTGStretch((UIView *)self, f)); }
+- (void)layoutSubviews { %orig; if (TTGEnabled() && TTGUnder()) TTGUnclip((UIView *)self); }
 %end
 %hook TTKFeedPlayerContainerView
-- (void)setFrame:(CGRect)f { %orig(TTGStretch(self, f)); }
+- (void)setFrame:(CGRect)f { %orig(TTGStretch((UIView *)self, f)); }
 %end
 %hook TTPlayerView
-- (void)setFrame:(CGRect)f { %orig(TTGStretch(self, f)); }
+- (void)setFrame:(CGRect)f { %orig(TTGStretch((UIView *)self, f)); }
 %end
 %hook TTMetalView
-- (void)setFrame:(CGRect)f { %orig(TTGStretch(self, f)); }
+- (void)setFrame:(CGRect)f { %orig(TTGStretch((UIView *)self, f)); }
 %end
 %hook MTKView
-- (void)setFrame:(CGRect)f { if ([self.superview isKindOfClass:NSClassFromString(@"TTMetalView")]) %orig(TTGStretch(self, f)); else %orig; }
+- (void)setFrame:(CGRect)f { if ([((UIView *)self).superview isKindOfClass:NSClassFromString(@"TTMetalView")]) %orig(TTGStretch((UIView *)self, f)); else %orig; }
 %end
 %hook TTKMediaBusinessCoverImageView
-- (void)setFrame:(CGRect)f { %orig(TTGStretch(self, f)); }
+- (void)setFrame:(CGRect)f { %orig(TTGStretch((UIView *)self, f)); }
 %end
