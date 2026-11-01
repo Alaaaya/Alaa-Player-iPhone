@@ -13,7 +13,7 @@ static const NSInteger kSelTag   = 0x61A56;
 #define kPrefFloating @"alaa_tt_glass_floating"
 #define kPrefUnder    @"alaa_tt_video_under"
 #define kPrefLabels   @"alaa_tt_hide_labels"
-#define kPrefStyle    @"alaa_tt_glass_style"   // 0 liquid glass, 1 dark blur, 2 light blur
+#define kPrefStyle    @"alaa_tt_glass_style_v2"   // 0 liquid glass, 1 dark blur, 2 light blur
 
 static NSUserDefaults *D(void) { return NSUserDefaults.standardUserDefaults; }
 static BOOL PB(NSString *k, BOOL def) { id v = [D() objectForKey:k]; return v ? [v boolValue] : def; }
@@ -48,9 +48,9 @@ static UIVisualEffect *TTGEffect(void) {
     if (st == 2) return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialLight];
     Class glassCls = NSClassFromString(@"UIGlassEffect"); // iOS 26 Liquid Glass
     if (glassCls) {
-        id e = [[glassCls alloc] init];
+        id e = [glassCls respondsToSelector:@selector(effectWithStyle:)] ? ((id (*)(id, SEL, NSInteger))objc_msgSend)(glassCls, @selector(effectWithStyle:), 1) : [[glassCls alloc] init]; // 1 = clear glass
         if ([e respondsToSelector:@selector(setTintColor:)])
-            ((void (*)(id, SEL, id))objc_msgSend)(e, @selector(setTintColor:), [UIColor colorWithWhite:0 alpha:0.08]);
+            ((void (*)(id, SEL, id))objc_msgSend)(e, @selector(setTintColor:), [UIColor colorWithWhite:0 alpha:0.12]);
         if ([e respondsToSelector:@selector(setInteractive:)])
             ((void (*)(id, SEL, BOOL))objc_msgSend)(e, @selector(setInteractive:), YES);
         return e;
