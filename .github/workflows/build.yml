@@ -1,0 +1,30 @@
+name: Build TikTokGlass
+on:
+  push:
+    branches: [tiktok-glass]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: theos/theos
+          path: theos
+          submodules: recursive
+      - name: Tools
+        run: brew install ldid make dpkg
+      - name: Build
+        env:
+          THEOS: ${{ github.workspace }}/theos
+        run: |
+          gmake package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+          mkdir -p out
+          cp packages/*.deb out/
+          cp .theos/obj/TikTokGlass.dylib out/ || find .theos -name 'TikTokGlass.dylib' -exec cp {} out/ \;
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TikTokGlass
+          path: out/
