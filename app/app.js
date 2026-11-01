@@ -89,7 +89,7 @@ async function sync(){
 if(state.panelBusy||Date.now()<panelRetryAt)return;state.panelBusy=true;$('sync').disabled=true;$('activation').textContent=tr('جارٍ التحقق من التفعيل…');
 try{
 var binding={p_device_code:code,p_device_token:deviceIdentity.token};
-var registration=await rpc('register_device_v2',Object.assign({p_app_type:'alaa_player',p_model:window.APTouch?'iPhone · Alaa Player 2.7.1':'LG webOS · Alaa Player 2.7.1'},binding));
+var registration=await rpc('register_device_v2',Object.assign({p_app_type:'alaa_player',p_model:window.APTouch?'iPhone · Alaa Player 2.8':'LG webOS · Alaa Player 2.8'},binding));
 if(registration.status==='rate_limited'){panelRetryAt=Date.now()+Math.max(60,Number(registration.retry_after)||3600)*1000+Math.random()*3000;return;}
 if(['registered','unavailable'].indexOf(registration.status)<0)throw Error('Pairing unavailable');
 var raw=await rpc('get_device_config_v2',binding);
@@ -558,6 +558,21 @@ function finishOrganization(cancel){
  var t=organize.target;if(cancel){organizeOrders[organize.scope]=organize.original.slice();repaintOrganization(t);if(organize.before===undefined)delete organizeOrders[organize.scope];else organizeOrders[organize.scope]=organize.before;}else storeWrite('ap-live-order',JSON.stringify(organizeOrders));
  closeOrganization();repaintOrganization(t);focusOrganization(t);
 }
+/* Touch reorder (long-press in touch.js). Same per-provider order store as the remote organiser
+   (ap-live-order): live/movie/series categories and each category's channels. */
+window.APReorder={
+ target:function(el){if(organize||!el)return null;var t=organizationTarget(el);if(!t||(t.type!=='categories'&&t.type!=='items'))return null;if(t.type==='categories'&&t.group==='@favorites')return null;
+  t.title=t.type==='categories'?({live:tr('تصنيفات البث المباشر'),movies:tr('تصنيفات الأفلام'),series:tr('تصنيفات المسلسلات')})[state.kind]||tr('التصنيفات'):(state.group==='All'?tr('جميع القنوات'):displayLabel(state.group));return t;},
+ rows:function(t){
+  if(t.type==='categories')return categoryWindow.nodes.filter(function(b){return b.dataset.groupName!=='@favorites';}).map(function(b){var l=b.querySelector('.category-label');return {id:categoryID(b.dataset.groupName,state.kind),label:l?l.textContent:b.textContent};});
+  return state.filtered.map(function(i){return {id:key(i),label:displayLabel(i.name||''),logo:i.kind==='live'?i.logo||'':''};});
+ },
+ save:function(t,ids){var scope=orderScope(t.scope),prev=Array.isArray(organizeOrders[scope])?organizeOrders[scope]:[],mine=new Set(ids);
+  // A category's channels are ranked inside the kind-wide list; other categories keep their order.
+  organizeOrders[scope]=ids.concat(prev.filter(function(id){return !mine.has(id);})).slice(0,20000);storeWrite('ap-live-order',JSON.stringify(organizeOrders));lastCategorySignature='';render();},
+ reset:function(t,ids){var scope=orderScope(t.scope),prev=Array.isArray(organizeOrders[scope])?organizeOrders[scope]:[],mine=new Set(ids),rest=t.type==='categories'?[]:prev.filter(function(id){return !mine.has(id);});
+  if(rest.length)organizeOrders[scope]=rest;else delete organizeOrders[scope];storeWrite('ap-live-order',JSON.stringify(organizeOrders));lastCategorySignature='';render();}
+};
 document.addEventListener('keydown',function(e){
  var k=({13:'Enter',37:'ArrowLeft',38:'ArrowUp',39:'ArrowRight',40:'ArrowDown',27:'Escape',461:'BrowserBack'})[e.keyCode]||e.key,back=e.keyCode===461||k==='Escape'||k==='BrowserBack';
  if(organize){e.preventDefault();e.stopImmediatePropagation();if(k==='Enter'&&hold&&hold.opened)return;
@@ -604,15 +619,20 @@ var categoryWindow={nodes:[],start:0,pitch:66};
 function categoryPitch(){var n=categoryWindow.nodes,a=n[0],b=n[1];if(a&&b&&a.isConnected&&b.isConnected){var d=b.getBoundingClientRect().top-a.getBoundingClientRect().top;if(d>20&&d<400)categoryWindow.pitch=d;}else if(window.APTouch&&a&&a.isConnected){var h=a.getBoundingClientRect().height;if(h>20)categoryWindow.pitch=h+8;}return categoryWindow.pitch;}
 function paintCategoryWindow(start){
 var cat=$('categories'),nodes=categoryWindow.nodes;
+// Touch: every category stays mounted. Re-windowing on scroll rebuilt the column and wrote
+// scrollTop mid-fling, which cancelled iOS momentum (the stutter). CSS content-visibility keeps it cheap.
+if(window.APTouch){categoryWindow.start=0;if(cat.childElementCount!==nodes.length||nodes.some(function(b,i){return cat.children[i]!==b;})){var top=cat.scrollTop,frag=document.createDocumentFragment();nodes.forEach(function(b){frag.appendChild(b);});cat.replaceChildren(frag);cat.scrollTop=top;}return;}
 start=Math.max(0,Math.min(start,Math.max(0,nodes.length-20)));categoryWindow.start=start;
 var top=cat.scrollTop;cat.replaceChildren();
 function pad(h){var d=document.createElement('div');d.style.height=h+'px';d.style.flex='0 0 auto';d.style.minHeight=h+'px';d.className='category-space';cat.appendChild(d);}
 var P=categoryWindow.pitch;pad(start*P);nodes.slice(start,start+20).forEach(function(b){cat.appendChild(b);});pad(Math.max(0,nodes.length-start-20)*P);var M=categoryPitch();if(Math.abs(M-P)>1){[[cat.firstChild,start*M],[cat.lastChild,Math.max(0,nodes.length-start-20)*M]].forEach(function(x){x[0].style.height=x[0].style.minHeight=x[1]+'px';});}cat.scrollTop=top;
 }
 function installCategoryWindow(nodes){categoryWindow.nodes=nodes;nodes.forEach(function(b,i){b.dataset.categoryIndex=i;});
-var selected=nodes.findIndex(function(b){return b.classList.contains('selected');});paintCategoryWindow(Math.max(0,selected-3));}
+var selected=nodes.findIndex(function(b){return b.classList.contains('selected');});paintCategoryWindow(Math.max(0,selected-3));
+if(window.APTouch&&nodes[selected]){var cat=$('categories'),node=nodes[selected];if(node.offsetTop<cat.scrollTop||node.offsetTop+node.offsetHeight>cat.scrollTop+cat.clientHeight)cat.scrollTop=Math.max(0,node.offsetTop-cat.clientHeight/3);}}
 $('categories').addEventListener('scroll',function(){
-if(!window.APTouch&&$('categories').contains(document.activeElement))return;
+if(window.APTouch)return;
+if($('categories').contains(document.activeElement))return;
 var start=Math.max(0,Math.floor($('categories').scrollTop/categoryWindow.pitch)-2);if(start!==categoryWindow.start)paintCategoryWindow(start);
 });
 function renderItems(){
@@ -692,7 +712,11 @@ if(G){el.style.paddingBottom=(Math.ceil(Math.max(0,state.filtered.length-start-p
 if(!state.filtered.length){var empty=document.createElement('p');empty.className='catalog-empty';empty.textContent=!state.provider?tr('اربط جهازك أو أضف قائمة من الإعدادات'):state.provider.type==='m3u'&&state.kind!=='live'?tr('تظهر عناصر M3U ضمن البث المباشر. استخدم Xtream للأفلام والمسلسلات.'):state.filter==='favorites'?tr('لم تضف عناصر للمفضلة بعد'):state.filter==='recent'?tr('لم تشاهد أي عناصر بعد'):$('search').value?tr('لا توجد نتائج مطابقة للبحث'):tr('لا توجد عناصر في هذه القائمة');el.appendChild(empty);}
 }
 var scrollFrame=false;
-$('items').addEventListener('scroll',function(){if(scrollFrame)return;scrollFrame=true;requestAnimationFrame(function(){scrollFrame=false;var G=state.kind!=='live'&&!state.episodes?gridSpec():null,cols=G?G.cols:1;var rowHeight=G?G.row:window.APTouch&&state.kind==='live'?68:state.kind==='live'?(document.body.dataset.theme==='velour'?(document.body.dataset.channelSize==='large'?138:document.body.dataset.channelSize==='medium'?118:98):93):158,start=Math.max(0,Math.floor($('items').scrollTop/rowHeight)-1)*cols;if(start!==state.virtualStart){var focused=$('items').contains(document.activeElement)?document.activeElement.dataset.index:null;if(!window.APTouch&&focused!=null&&Number(focused)>=state.virtualStart&&Number(focused)<state.virtualStart+(G?G.page:pageSize))return;renderWindow(start);}});});
+$('items').addEventListener('scroll',function(){if(scrollFrame)return;scrollFrame=true;requestAnimationFrame(function(){scrollFrame=false;var G=state.kind!=='live'&&!state.episodes?gridSpec():null,cols=G?G.cols:1;var rowHeight=G?G.row:window.APTouch&&state.kind==='live'?68:state.kind==='live'?(document.body.dataset.theme==='velour'?(document.body.dataset.channelSize==='large'?138:document.body.dataset.channelSize==='medium'?118:98):93):158,start=Math.max(0,Math.floor($('items').scrollTop/rowHeight)-1)*cols;
+// Touch: re-window only when the viewport nears the rendered edge, with the window centred
+// on the viewport, instead of rebuilding the list on every row step of a fling.
+if(window.APTouch){var el=$('items'),windowRows=Math.ceil((G?G.page:pageSize)/cols),viewRows=Math.ceil(el.clientHeight/rowHeight)+1,topRow=Math.floor(el.scrollTop/rowHeight),current=state.virtualStart/cols;if(windowRows>viewRows+2){var totalRows=Math.ceil(state.filtered.length/cols);if((topRow>current||current===0)&&(topRow+viewRows<current+windowRows||current+windowRows>=totalRows))return;start=Math.max(0,topRow-Math.floor((windowRows-viewRows)/2))*cols;}}
+if(start!==state.virtualStart){var focused=$('items').contains(document.activeElement)?document.activeElement.dataset.index:null;if(!window.APTouch&&focused!=null&&Number(focused)>=state.virtualStart&&Number(focused)<state.virtualStart+(G?G.page:pageSize))return;renderWindow(start);}});});
 function livePages(){$('pagination').replaceChildren();}
 function hero(item){
 $('hero').hidden=false;$('hero-name').textContent=item.name;$('hero-meta').textContent=metadata(item)||item.group;
@@ -1212,7 +1236,7 @@ play(next);hideControls();
 showLiveBar();
 }
 document.addEventListener('ap-vod-controls',function(){showControls();});
-function controlsMenuOpen(){return !!($("phone-more-sheet")&&!$("phone-more-sheet").hidden)||!!livePanel||!$('quick-channels').hidden||($('f21-modal')&&!$('f21-modal').hidden)||($('f21-next')&&!$('f21-next').hidden);}
+function controlsMenuOpen(){return !!($("phone-more-sheet")&&!$("phone-more-sheet").hidden)||!!($("ap-av-panel")&&!$("ap-av-panel").hidden)||!!($("ap-cast-sheet")&&!$("ap-cast-sheet").hidden)||!!livePanel||!$('quick-channels').hidden||($('f21-modal')&&!$('f21-modal').hidden)||($('f21-next')&&!$('f21-next').hidden);}
 function armControlsHide(){clearTimeout(hideTimer);clearTimeout(zapTimer);hideTimer=setTimeout(function(){if(!state.playing)return;if((video.paused&&!window.APTouch)||controlsMenuOpen()){armControlsHide();return;}$('player-ui').classList.add('dim');hideLiveBar();if(fSkip)fSkip.hidden=true;},4000);}
 function showControls(){if(state.playing&&state.playing.kind==='live'){showLiveBar();return;}clearSeekFeedback();$('player-ui').classList.remove('dim');armControlsHide();}
 var controlsPointer=null;
@@ -1247,13 +1271,13 @@ e.preventDefault();e.stopImmediatePropagation();seek(k==='ArrowRight'?10:-10,hid
 function dismissPhoneOverlays(){
 if(livePanel){livePanel.remove();livePanel=null;}
 $('quick-channels').hidden=true;
-['phone-more-sheet','red-sublist','f21-modal','f21-next'].forEach(function(id){var n=$(id);if(n)n.hidden=true;});
+['phone-more-sheet','red-sublist','f21-modal','f21-next','ap-av-panel','ap-cast-sheet'].forEach(function(id){var n=$(id);if(n)n.hidden=true;});
 hideControls();hideLiveBar();if(fSkip)fSkip.hidden=true;
 }
 if(window.APTouch){
 $('player').addEventListener('click',function(e){
 var target=e.target;
-if(target.closest('button,input,select,#quick-channels,#live-panel,#red-sublist,#phone-more-sheet,#f21-modal,#f21-next'))return;
+if(target.closest('button,input,select,#quick-channels,#live-panel,#red-sublist,#phone-more-sheet,#f21-modal,#f21-next,#ap-av-panel,#ap-cast-sheet,#ap-cast-cluster'))return;
 var open=livePanel||!$('quick-channels').hidden||['phone-more-sheet','red-sublist','f21-modal'].some(function(id){return $(id)&&!$(id).hidden;});
 if(open||!$('player-ui').classList.contains('dim')||($('live-now')&&!$('live-now').hidden)){dismissPhoneOverlays();}else showControls();
 },true);
