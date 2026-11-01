@@ -3,6 +3,8 @@ on:
   push:
     branches: [tiktok-glass]
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: macos-15
@@ -28,3 +30,10 @@ jobs:
         with:
           name: TikTokGlass
           path: out/
+      - name: Publish build to tiktok-glass-out branch
+        run: |
+          cd out
+          git init -q -b tiktok-glass-out
+          git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "build ${{ github.sha }}"
+          git push -f https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git tiktok-glass-out
