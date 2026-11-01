@@ -351,7 +351,7 @@ static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, i
     for (NSUInteger i = 0; i < buttons.count; i++) if (TTGIsSelected(buttons[i])) { selIdx = i; break; }
     if (selIdx < 0 && [self respondsToSelector:@selector(selectedItem)] && self.selectedItem && self.items.count == buttons.count)
         selIdx = [self.items indexOfObject:self.selectedItem];
-    if (selIdx >= 0 && selIdx < (NSInteger)targets.count && TTGFloating()) {
+    if (NO && selIdx >= 0 && selIdx < (NSInteger)targets.count && TTGFloating()) { // highlight removed (1.10)
         CGFloat sw = MIN(slotW + 4, 92), sh = pill.size.height - 10;
         CGPoint tc = [targets[selIdx] CGPointValue];
         sel.frame = CGRectMake(tc.x - sw / 2, pill.origin.y + 5, sw, sh);
