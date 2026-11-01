@@ -89,7 +89,7 @@ async function sync(){
 if(state.panelBusy||Date.now()<panelRetryAt)return;state.panelBusy=true;$('sync').disabled=true;$('activation').textContent=tr('جارٍ التحقق من التفعيل…');
 try{
 var binding={p_device_code:code,p_device_token:deviceIdentity.token};
-var registration=await rpc('register_device_v2',Object.assign({p_app_type:'alaa_player',p_model:window.APTouch?'iPhone · Alaa Player 2.6.1':'LG webOS · Alaa Player 2.6.1'},binding));
+var registration=await rpc('register_device_v2',Object.assign({p_app_type:'alaa_player',p_model:window.APTouch?'iPhone · Alaa Player 2.8':'LG webOS · Alaa Player 2.8'},binding));
 if(registration.status==='rate_limited'){panelRetryAt=Date.now()+Math.max(60,Number(registration.retry_after)||3600)*1000+Math.random()*3000;return;}
 if(['registered','unavailable'].indexOf(registration.status)<0)throw Error('Pairing unavailable');
 var raw=await rpc('get_device_config_v2',binding);
@@ -268,7 +268,7 @@ var d=cached.data;
 function fat(list,kind){return (list||[]).map(function(i){var o=Object.assign({name:'Untitled',group:'Other',logo:null,rating:'',year:'',description:'',genre:'',seasons:'',episodeCount:'',added:0,quality:'',program:'',backdrop:null},i);o.kind=kind;o.provider=p;if(kind==='live'&&p.type==='xtream')o.url=A.xcStream(p,'live',o.id,'m3u8');return o;}).filter(function(i){return itemAllowed(i,p);});}
 homeCatalog={live:fat(d.catalog.live,'live'),movies:fat(d.catalog.movies,'movies'),series:fat(d.catalog.series,'series')};liveCategories=d.categories.live||[];vodCategories={movies:d.categories.movies||[],series:d.categories.series||[]};
 homeLoadState={movies:d.loadState.movies==='ready'?'ready':'idle',series:d.loadState.series==='ready'?'ready':'idle'};
-state.items=homeCatalog[state.kind]||[];state.group=state.items.length&&state.kind==='live'?state.items[0].group:'All';
+state.items=homeCatalog[state.kind]||[];state.group='All';
 catalogReady=homeLoadState.movies==='ready'&&homeLoadState.series==='ready';
 return true;
 }
@@ -347,21 +347,29 @@ if(kind==='live'){
 var cats=await xc(p,'get_live_categories').catch(function(){return [];});
 var firstCategories=!liveCategories.length;liveCategories=cats;
 if(firstCategories&&state.provider===p&&state.kind==='live')render();
-if(!category)category=cats.length?cats[0].category_id:null;
+if(!category)category=cats.length?'All':null;
 if(!category)return [];
 if(category==='All'){
 var all=[],complete=true;
 for(var n=0;n<cats.length;n++){var record=await cacheRead(await catalogKey(p,'get_live_streams',cats[n].category_id));if(!record){complete=false;break;}all=all.concat(A.visibleRows(p,'live',record.data));}
 if(complete&&cats.length)return A.xcItems(all,cats,p,kind);
 }
-if(category==='All'){var rows=[];for(var j=0;j<cats.length;j++)rows=rows.concat(await xc(p,'get_live_streams',cats[j].category_id));return A.xcItems(rows,cats,p,kind);}
+if(category==='All'){var full=await xc(p,'get_live_streams').catch(function(){return null;});if(Array.isArray(full)&&full.length)return A.xcItems(full,cats,p,kind);var rows=[];for(var j=0;j<cats.length;j++)rows=rows.concat(await xc(p,'get_live_streams',cats[j].category_id));return A.xcItems(rows,cats,p,kind);}
 return A.xcItems(await xc(p,'get_live_streams',category),cats,p,kind);
 }
 var cats=vodCategories[kind];
 if(!cats.length){cats=await xc(p,'get_'+mode+'_categories');vodCategories[kind]=cats;}
 if(!cats.length)return [];
-var chosen=category||cats[0].category_id;
-var choices=category?[{category_id:category}]:cats;
+var action=kind==='series'?'get_series':'get_vod_streams';
+if(!category||category==='All'){
+// "All categories" means every title: ask the provider for the full list, fall back to every category one by one.
+var everything=await xc(p,action).catch(function(){return null;});
+if(Array.isArray(everything)&&everything.length)return A.xcItems(everything,cats,p,kind);
+var merged=[];for(var m=0;m<cats.length;m++){var part=await xc(p,action,cats[m].category_id).catch(function(){return [];});if(Array.isArray(part))merged=merged.concat(part);}
+return A.xcItems(merged,cats,p,kind);
+}
+var chosen=category;
+var choices=[{category_id:category}];
 for(var c=0;c<choices.length;c++){
 var rows=await xc(p,kind==='series'?'get_series':'get_vod_streams',choices[c].category_id);
 if(!Array.isArray(rows))throw Error('Invalid catalogue');
@@ -371,7 +379,7 @@ return [];
 }
 async function loadVodCategory(name){
 var cat=(state.kind==='live'?liveCategories:vodCategories[state.kind]).find(function(c){return c.category_name===name;});
-if(!cat&&!(state.kind==='live'&&name==='All'))return;
+if(!cat&&name!=='All')return;
 var kind=state.kind,token=++state.request;status(tr('جارٍ تحميل القسم…'));
 try{var rows=await xcCatalog(state.provider,kind,cat?cat.category_id:'All');
 if(token!==state.request)return;state.items=uniqueTitles(rows);homeCatalog[kind]=state.items;state.group=name;render();focusFirst();status('');
@@ -391,7 +399,7 @@ async function load(){
 var p=state.provider,version=++state.request;state.selected=null;state.group='All';state.page=0;$('search').value='';state.items=homeCatalog[state.kind]||[];render();if(!p)return;status(tr('جارٍ تحميل ')+(p.name||tr('القائمة'))+'…');
 try{var list=[];if(p.type==='m3u'){list=A.parseM3U(await request(p.url,null,24*1024*1024),p.url).filter(function(i){return i.kind===state.kind;});}
 else{list=await xcCatalog(p,state.kind);}
-if(version!==state.request)return;list=uniqueTitles(list);if(state.kind==='live'&&p.type==='xtream'&&list.length)state.group=list[0].group;state.items=list;homeCatalog[state.kind]=list;if(state.kind!=='live')homeLoadState[state.kind]='ready';render();saveHomeSnapshot(p);loadHomeCatalog(p);status(tr('تم تحميل ')+list.length+tr(' عنوان')+(p.type==='m3u'&&state.kind!=='live'?tr(' · عناصر M3U متاحة ضمن البث المباشر'):''));focusFirst();flushFeatured();
+if(version!==state.request)return;list=uniqueTitles(list);state.items=list;homeCatalog[state.kind]=list;if(state.kind!=='live')homeLoadState[state.kind]='ready';render();saveHomeSnapshot(p);loadHomeCatalog(p);status(tr('تم تحميل ')+list.length+tr(' عنوان')+(p.type==='m3u'&&state.kind!=='live'?tr(' · عناصر M3U متاحة ضمن البث المباشر'):''));focusFirst();flushFeatured();
 }catch(e){if(version!==state.request)return;if(!state.items.length&&state.kind!=='live')homeLoadState[state.kind]='error';render();status(errorMessage(e));}}
 function button(text,fn){var b=document.createElement('button');b.textContent=text;b.onclick=fn;return b;}
 function displayLabel(name){return String(name||'').normalize('NFKC').replace(/\s+/g,' ').trim();}
@@ -550,6 +558,21 @@ function finishOrganization(cancel){
  var t=organize.target;if(cancel){organizeOrders[organize.scope]=organize.original.slice();repaintOrganization(t);if(organize.before===undefined)delete organizeOrders[organize.scope];else organizeOrders[organize.scope]=organize.before;}else storeWrite('ap-live-order',JSON.stringify(organizeOrders));
  closeOrganization();repaintOrganization(t);focusOrganization(t);
 }
+/* Touch reorder (long-press in touch.js). Same per-provider order store as the remote organiser
+   (ap-live-order): live/movie/series categories and each category's channels. */
+window.APReorder={
+ target:function(el){if(organize||!el)return null;var t=organizationTarget(el);if(!t||(t.type!=='categories'&&t.type!=='items'))return null;if(t.type==='categories'&&t.group==='@favorites')return null;
+  t.title=t.type==='categories'?({live:tr('تصنيفات البث المباشر'),movies:tr('تصنيفات الأفلام'),series:tr('تصنيفات المسلسلات')})[state.kind]||tr('التصنيفات'):(state.group==='All'?tr('جميع القنوات'):displayLabel(state.group));return t;},
+ rows:function(t){
+  if(t.type==='categories')return categoryWindow.nodes.filter(function(b){return b.dataset.groupName!=='@favorites';}).map(function(b){var l=b.querySelector('.category-label');return {id:categoryID(b.dataset.groupName,state.kind),label:l?l.textContent:b.textContent};});
+  return state.filtered.map(function(i){return {id:key(i),label:displayLabel(i.name||''),logo:i.kind==='live'?i.logo||'':''};});
+ },
+ save:function(t,ids){var scope=orderScope(t.scope),prev=Array.isArray(organizeOrders[scope])?organizeOrders[scope]:[],mine=new Set(ids);
+  // A category's channels are ranked inside the kind-wide list; other categories keep their order.
+  organizeOrders[scope]=ids.concat(prev.filter(function(id){return !mine.has(id);})).slice(0,20000);storeWrite('ap-live-order',JSON.stringify(organizeOrders));lastCategorySignature='';render();},
+ reset:function(t,ids){var scope=orderScope(t.scope),prev=Array.isArray(organizeOrders[scope])?organizeOrders[scope]:[],mine=new Set(ids),rest=t.type==='categories'?[]:prev.filter(function(id){return !mine.has(id);});
+  if(rest.length)organizeOrders[scope]=rest;else delete organizeOrders[scope];storeWrite('ap-live-order',JSON.stringify(organizeOrders));lastCategorySignature='';render();}
+};
 document.addEventListener('keydown',function(e){
  var k=({13:'Enter',37:'ArrowLeft',38:'ArrowUp',39:'ArrowRight',40:'ArrowDown',27:'Escape',461:'BrowserBack'})[e.keyCode]||e.key,back=e.keyCode===461||k==='Escape'||k==='BrowserBack';
  if(organize){e.preventDefault();e.stopImmediatePropagation();if(k==='Enter'&&hold&&hold.opened)return;
@@ -591,19 +614,26 @@ function posterMetadata(i){return [i.year&&/^\d{4}$/.test(String(i.year))?i.year
 window.APPosterDisplay={title:posterTitle,metadata:posterMetadata};
 function metadata(item){return [item.year,item.seasons?item.seasons+tr(' مواسم'):'',item.episodeCount?item.episodeCount+tr(' حلقات'):'',item.rating?'★ '+item.rating:'',item.quality].filter(Boolean).join('  ·  ');}
 
-var categoryWindow={nodes:[],start:0};
+var categoryWindow={nodes:[],start:0,pitch:66};
+// Category rows are virtualised; the phone layout makes them taller than on TV, so measure the real row step instead of assuming 66px.
+function categoryPitch(){var n=categoryWindow.nodes,a=n[0],b=n[1];if(a&&b&&a.isConnected&&b.isConnected){var d=b.getBoundingClientRect().top-a.getBoundingClientRect().top;if(d>20&&d<400)categoryWindow.pitch=d;}else if(window.APTouch&&a&&a.isConnected){var h=a.getBoundingClientRect().height;if(h>20)categoryWindow.pitch=h+8;}return categoryWindow.pitch;}
 function paintCategoryWindow(start){
 var cat=$('categories'),nodes=categoryWindow.nodes;
+// Touch: every category stays mounted. Re-windowing on scroll rebuilt the column and wrote
+// scrollTop mid-fling, which cancelled iOS momentum (the stutter). CSS content-visibility keeps it cheap.
+if(window.APTouch){categoryWindow.start=0;if(cat.childElementCount!==nodes.length||nodes.some(function(b,i){return cat.children[i]!==b;})){var top=cat.scrollTop,frag=document.createDocumentFragment();nodes.forEach(function(b){frag.appendChild(b);});cat.replaceChildren(frag);cat.scrollTop=top;}return;}
 start=Math.max(0,Math.min(start,Math.max(0,nodes.length-20)));categoryWindow.start=start;
 var top=cat.scrollTop;cat.replaceChildren();
-function pad(h){var d=document.createElement('div');d.style.height=h+'px';d.className='category-space';cat.appendChild(d);}
-pad(start*66);nodes.slice(start,start+20).forEach(function(b){cat.appendChild(b);});pad(Math.max(0,nodes.length-start-20)*66);cat.scrollTop=top;
+function pad(h){var d=document.createElement('div');d.style.height=h+'px';d.style.flex='0 0 auto';d.style.minHeight=h+'px';d.className='category-space';cat.appendChild(d);}
+var P=categoryWindow.pitch;pad(start*P);nodes.slice(start,start+20).forEach(function(b){cat.appendChild(b);});pad(Math.max(0,nodes.length-start-20)*P);var M=categoryPitch();if(Math.abs(M-P)>1){[[cat.firstChild,start*M],[cat.lastChild,Math.max(0,nodes.length-start-20)*M]].forEach(function(x){x[0].style.height=x[0].style.minHeight=x[1]+'px';});}cat.scrollTop=top;
 }
 function installCategoryWindow(nodes){categoryWindow.nodes=nodes;nodes.forEach(function(b,i){b.dataset.categoryIndex=i;});
-var selected=nodes.findIndex(function(b){return b.classList.contains('selected');});paintCategoryWindow(Math.max(0,selected-3));}
+var selected=nodes.findIndex(function(b){return b.classList.contains('selected');});paintCategoryWindow(Math.max(0,selected-3));
+if(window.APTouch&&nodes[selected]){var cat=$('categories'),node=nodes[selected];if(node.offsetTop<cat.scrollTop||node.offsetTop+node.offsetHeight>cat.scrollTop+cat.clientHeight)cat.scrollTop=Math.max(0,node.offsetTop-cat.clientHeight/3);}}
 $('categories').addEventListener('scroll',function(){
+if(window.APTouch)return;
 if($('categories').contains(document.activeElement))return;
-var start=Math.max(0,Math.floor($('categories').scrollTop/66)-2);if(start!==categoryWindow.start)paintCategoryWindow(start);
+var start=Math.max(0,Math.floor($('categories').scrollTop/categoryWindow.pitch)-2);if(start!==categoryWindow.start)paintCategoryWindow(start);
 });
 function renderItems(){
 fPaintNew();
@@ -651,7 +681,16 @@ $('latest-heading').textContent=tr('جميع الأفلام')+(state.group==='Al
 }
 var focusDetailTimer;
 function redLayout(){return (document.body.dataset.theme==='red'||(document.body.dataset.theme==='aya'||document.body.dataset.theme==='alaa'||document.body.dataset.theme==='harak'||document.body.dataset.theme==='muse'||document.body.dataset.theme==='velour'))&&window.APRed?window.APRed.layout():null;}
-function gridSpec(){if(window.APTouch)return {cols:innerWidth<600?2:4,row:260,page:32};var L=state.kind!=='live'&&!state.episodes?redLayout():null;return L?L.grid:{cols:6,row:350,page:24};}
+function touchGridSpec(){
+// Phone grid follows the real CSS layout: column count from the grid, row height from the tile itself, so rows sit tight with no empty band.
+var el=$('items'),cs=getComputedStyle(el),cols=(cs.gridTemplateColumns||'').split(' ').filter(function(x){return x&&x!=='none';}).length||(innerWidth<600?2:5);
+var gap=parseFloat(cs.rowGap)||0,first=el.querySelector('button'),tile=first?first.getBoundingClientRect().height:0;
+if(!tile){var colGap=parseFloat(cs.columnGap)||0,w=(el.clientWidth-(cols-1)*colGap)/cols;tile=Math.round(w*1.5+34);}
+tile=Math.max(80,Math.ceil(tile));
+if(el.dataset.apRow!==String(tile)){el.dataset.apRow=String(tile);el.style.setProperty('grid-auto-rows',tile+'px','important');}
+return {cols:cols,row:tile+gap,page:Math.max(32,cols*8)};
+}
+function gridSpec(){if(window.APTouch)return touchGridSpec();var L=state.kind!=='live'&&!state.episodes?redLayout():null;return L?L.grid:{cols:6,row:350,page:24};}
 function episodeCols(){var L=redLayout();return L?L.episodes.cols:5;}
 function renderWindow(start){
 var el=$('items'),rowHeight=window.APTouch&&state.kind==='live'?68:state.kind==='live'?(document.body.dataset.theme==='velour'?(document.body.dataset.channelSize==='large'?138:document.body.dataset.channelSize==='medium'?118:98):93):158;var G=state.kind!=='live'&&!state.episodes?gridSpec():null,cols=G?G.cols:1;start=Math.floor(start/cols)*cols;var ps=G?G.page:pageSize;rowHeight=G?G.row:rowHeight;state.virtualStart=start;el.replaceChildren();
@@ -673,7 +712,11 @@ if(G){el.style.paddingBottom=(Math.ceil(Math.max(0,state.filtered.length-start-p
 if(!state.filtered.length){var empty=document.createElement('p');empty.className='catalog-empty';empty.textContent=!state.provider?tr('اربط جهازك أو أضف قائمة من الإعدادات'):state.provider.type==='m3u'&&state.kind!=='live'?tr('تظهر عناصر M3U ضمن البث المباشر. استخدم Xtream للأفلام والمسلسلات.'):state.filter==='favorites'?tr('لم تضف عناصر للمفضلة بعد'):state.filter==='recent'?tr('لم تشاهد أي عناصر بعد'):$('search').value?tr('لا توجد نتائج مطابقة للبحث'):tr('لا توجد عناصر في هذه القائمة');el.appendChild(empty);}
 }
 var scrollFrame=false;
-$('items').addEventListener('scroll',function(){if(scrollFrame)return;scrollFrame=true;requestAnimationFrame(function(){scrollFrame=false;var G=state.kind!=='live'&&!state.episodes?gridSpec():null,cols=G?G.cols:1;var rowHeight=G?G.row:window.APTouch&&state.kind==='live'?68:state.kind==='live'?(document.body.dataset.theme==='velour'?(document.body.dataset.channelSize==='large'?138:document.body.dataset.channelSize==='medium'?118:98):93):158,start=Math.max(0,Math.floor($('items').scrollTop/rowHeight)-1)*cols;if(start!==state.virtualStart){var focused=$('items').contains(document.activeElement)?document.activeElement.dataset.index:null;if(!window.APTouch&&focused!=null&&Number(focused)>=state.virtualStart&&Number(focused)<state.virtualStart+(G?G.page:pageSize))return;renderWindow(start);}});});
+$('items').addEventListener('scroll',function(){if(scrollFrame)return;scrollFrame=true;requestAnimationFrame(function(){scrollFrame=false;var G=state.kind!=='live'&&!state.episodes?gridSpec():null,cols=G?G.cols:1;var rowHeight=G?G.row:window.APTouch&&state.kind==='live'?68:state.kind==='live'?(document.body.dataset.theme==='velour'?(document.body.dataset.channelSize==='large'?138:document.body.dataset.channelSize==='medium'?118:98):93):158,start=Math.max(0,Math.floor($('items').scrollTop/rowHeight)-1)*cols;
+// Touch: re-window only when the viewport nears the rendered edge, with the window centred
+// on the viewport, instead of rebuilding the list on every row step of a fling.
+if(window.APTouch){var el=$('items'),windowRows=Math.ceil((G?G.page:pageSize)/cols),viewRows=Math.ceil(el.clientHeight/rowHeight)+1,topRow=Math.floor(el.scrollTop/rowHeight),current=state.virtualStart/cols;if(windowRows>viewRows+2){var totalRows=Math.ceil(state.filtered.length/cols);if((topRow>current||current===0)&&(topRow+viewRows<current+windowRows||current+windowRows>=totalRows))return;start=Math.max(0,topRow-Math.floor((windowRows-viewRows)/2))*cols;}}
+if(start!==state.virtualStart){var focused=$('items').contains(document.activeElement)?document.activeElement.dataset.index:null;if(!window.APTouch&&focused!=null&&Number(focused)>=state.virtualStart&&Number(focused)<state.virtualStart+(G?G.page:pageSize))return;renderWindow(start);}});});
 function livePages(){$('pagination').replaceChildren();}
 function hero(item){
 $('hero').hidden=false;$('hero-name').textContent=item.name;$('hero-meta').textContent=metadata(item)||item.group;
@@ -1193,7 +1236,7 @@ play(next);hideControls();
 showLiveBar();
 }
 document.addEventListener('ap-vod-controls',function(){showControls();});
-function controlsMenuOpen(){return !!($("phone-more-sheet")&&!$("phone-more-sheet").hidden)||!!livePanel||!$('quick-channels').hidden||($('f21-modal')&&!$('f21-modal').hidden)||($('f21-next')&&!$('f21-next').hidden);}
+function controlsMenuOpen(){return !!($("phone-more-sheet")&&!$("phone-more-sheet").hidden)||!!($("ap-av-panel")&&!$("ap-av-panel").hidden)||!!($("ap-cast-sheet")&&!$("ap-cast-sheet").hidden)||!!livePanel||!$('quick-channels').hidden||($('f21-modal')&&!$('f21-modal').hidden)||($('f21-next')&&!$('f21-next').hidden);}
 function armControlsHide(){clearTimeout(hideTimer);clearTimeout(zapTimer);hideTimer=setTimeout(function(){if(!state.playing)return;if((video.paused&&!window.APTouch)||controlsMenuOpen()){armControlsHide();return;}$('player-ui').classList.add('dim');hideLiveBar();if(fSkip)fSkip.hidden=true;},4000);}
 function showControls(){if(state.playing&&state.playing.kind==='live'){showLiveBar();return;}clearSeekFeedback();$('player-ui').classList.remove('dim');armControlsHide();}
 var controlsPointer=null;
@@ -1228,13 +1271,13 @@ e.preventDefault();e.stopImmediatePropagation();seek(k==='ArrowRight'?10:-10,hid
 function dismissPhoneOverlays(){
 if(livePanel){livePanel.remove();livePanel=null;}
 $('quick-channels').hidden=true;
-['phone-more-sheet','red-sublist','f21-modal','f21-next'].forEach(function(id){var n=$(id);if(n)n.hidden=true;});
+['phone-more-sheet','red-sublist','f21-modal','f21-next','ap-av-panel','ap-cast-sheet'].forEach(function(id){var n=$(id);if(n)n.hidden=true;});
 hideControls();hideLiveBar();if(fSkip)fSkip.hidden=true;
 }
 if(window.APTouch){
 $('player').addEventListener('click',function(e){
 var target=e.target;
-if(target.closest('button,input,select,#quick-channels,#live-panel,#red-sublist,#phone-more-sheet,#f21-modal,#f21-next'))return;
+if(target.closest('button,input,select,#quick-channels,#live-panel,#red-sublist,#phone-more-sheet,#f21-modal,#f21-next,#ap-av-panel,#ap-cast-sheet,#ap-cast-cluster'))return;
 var open=livePanel||!$('quick-channels').hidden||['phone-more-sheet','red-sublist','f21-modal'].some(function(id){return $(id)&&!$(id).hidden;});
 if(open||!$('player-ui').classList.contains('dim')||($('live-now')&&!$('live-now').hidden)){dismissPhoneOverlays();}else showControls();
 },true);
