@@ -1,6 +1,6 @@
 {
   "id": "com.alaa.player.webos",
-  "version": "2.7.1",
+  "version": "2.8.0",
   "vendor": "Alaa",
   "type": "web",
   "main": "index.html",
