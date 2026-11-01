@@ -1,6 +1,6 @@
 Package: com.alaaaya.tiktokglass
 Name: Alaa_TikTok
-Version: 1.2
+Version: 1.3
 Architecture: iphoneos-arm64
 Description: Floating liquid glass tab bar for TikTok
 Maintainer: Alaaaya

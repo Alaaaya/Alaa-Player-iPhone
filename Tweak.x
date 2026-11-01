@@ -1,59 +1,100 @@
-// TikTokGlass - floating liquid-glass tab bar for TikTok
+// Alaa_TikTok - Instagram-style floating glass tab bar for TikTok
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
 
 static const NSInteger kGlassTag = 0x61A55;
+static const NSInteger kSelTag   = 0x61A56;
 
 #define kPrefEnabled  @"alaa_tt_glass_enabled"
 #define kPrefFloating @"alaa_tt_glass_floating"
 #define kPrefUnder    @"alaa_tt_video_under"
+#define kPrefLabels   @"alaa_tt_hide_labels"
 #define kPrefStyle    @"alaa_tt_glass_style"   // 0 liquid glass, 1 dark blur, 2 light blur
 
-static NSUserDefaults *TTGDefs(void) { return NSUserDefaults.standardUserDefaults; }
-static BOOL TTGEnabled(void)  { id v = [TTGDefs() objectForKey:kPrefEnabled];  return v ? [v boolValue] : YES; }
-static BOOL TTGFloating(void) { id v = [TTGDefs() objectForKey:kPrefFloating]; return v ? [v boolValue] : YES; }
-static BOOL TTGUnder(void)    { id v = [TTGDefs() objectForKey:kPrefUnder];    return v ? [v boolValue] : YES; }
-static NSInteger TTGStyle(void) { return [TTGDefs() integerForKey:kPrefStyle]; }
+static NSUserDefaults *D(void) { return NSUserDefaults.standardUserDefaults; }
+static BOOL PB(NSString *k, BOOL def) { id v = [D() objectForKey:k]; return v ? [v boolValue] : def; }
+#define TTGEnabled()  PB(kPrefEnabled, YES)
+#define TTGFloating() PB(kPrefFloating, YES)
+#define TTGUnder()    PB(kPrefUnder, YES)
+#define TTGNoLabels() PB(kPrefLabels, YES)
+static NSInteger TTGStyle(void) { return [D() integerForKey:kPrefStyle]; }
 static void TTGRefreshAll(void);
 
 @interface UITabBar (TTGlass)
 - (void)ttg_applyGlass;
 - (void)ttg_longPress:(UILongPressGestureRecognizer *)g;
 - (void)ttg_showMenu;
-- (void)ttg_longPressReopen;
+- (void)ttg_reopen;
 @end
 
 static UIVisualEffect *TTGEffect(void) {
     NSInteger st = TTGStyle();
-    if (st == 1) return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
+    if (st == 1) return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialDark];
     if (st == 2) return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialLight];
     Class glassCls = NSClassFromString(@"UIGlassEffect"); // iOS 26 Liquid Glass
     if (glassCls) {
         id e = [[glassCls alloc] init];
-        if ([e respondsToSelector:@selector(setTintColor:)]) {
-            ((void (*)(id, SEL, id))objc_msgSend)(e, @selector(setTintColor:), [UIColor colorWithWhite:0 alpha:0.35]);
-        }
-        if ([e respondsToSelector:@selector(setInteractive:)]) {
+        if ([e respondsToSelector:@selector(setTintColor:)])
+            ((void (*)(id, SEL, id))objc_msgSend)(e, @selector(setTintColor:), [UIColor colorWithWhite:0.15 alpha:0.35]);
+        if ([e respondsToSelector:@selector(setInteractive:)])
             ((void (*)(id, SEL, BOOL))objc_msgSend)(e, @selector(setInteractive:), YES);
-        }
         return e;
     }
-    return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
+    return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialDark];
 }
 
 static BOOL TTGIsButton(UIView *v) {
+    if (v.tag == kGlassTag || v.tag == kSelTag) return NO;
     if ([v isKindOfClass:[UIControl class]]) return YES;
     NSString *n = NSStringFromClass([v class]);
-    return [n containsString:@"Button"] || [n containsString:@"Badge"] || [n containsString:@"Item"];
+    return [n containsString:@"Button"];
+}
+
+static BOOL TTGIsSelected(UIView *b) {
+    if ([b isKindOfClass:[UIControl class]] && ((UIControl *)b).isSelected) return YES;
+    for (NSString *k in @[@"isSelected", @"selected", @"isCurrent"]) {
+        SEL s = NSSelectorFromString(k);
+        if ([b respondsToSelector:s]) {
+            @try { if ([[b valueForKey:k] boolValue]) return YES; } @catch (__unused id e) {}
+        }
+    }
+    return NO;
+}
+
+static void TTGSetLabelsHidden(UIView *v, BOOL hidden) {
+    for (UIView *s in v.subviews) {
+        if ([s isKindOfClass:[UILabel class]]) {
+            NSString *t = ((UILabel *)s).text;
+            // keep badge counters (digits) visible
+            BOOL isBadge = t.length && [t rangeOfCharacterFromSet:NSCharacterSet.decimalDigitCharacterSet.invertedSet].location == NSNotFound;
+            if (!isBadge) s.alpha = hidden ? 0 : 1;
+        } else TTGSetLabelsHidden(s, hidden);
+    }
+}
+
+// ---------- pushing the feed under the bar ----------
+static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, int depth) {
+    if (!v || depth > 9 || v == skip || v.hidden) return;
+    UIWindow *w = v.window; if (!w) return;
+    for (UIView *s in v.subviews) {
+        if (s == skip || s.hidden || [s isKindOfClass:[UITabBar class]]) continue;
+        CGRect r = [s convertRect:s.bounds toView:w];
+        if (r.size.height > w.bounds.size.height * 0.4 && fabs(CGRectGetMaxY(r) - barTop) < 4) {
+            CGRect f = s.frame;
+            f.size.height += (bottom - barTop);
+            s.frame = f;
+        }
+        TTGExtend(s, barTop, bottom, skip, depth + 1);
+    }
 }
 
 %hook UITabBar
 
 - (void)didMoveToWindow {
     %orig;
-    BOOL hasLP = NO;
-    for (UIGestureRecognizer *g in self.gestureRecognizers) if ([g.name isEqualToString:@"Alaa_TikTok"]) hasLP = YES;
-    if (!hasLP) {
+    BOOL has = NO;
+    for (UIGestureRecognizer *g in self.gestureRecognizers) if ([g.name isEqualToString:@"Alaa_TikTok"]) has = YES;
+    if (!has) {
         UILongPressGestureRecognizer *lp = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(ttg_longPress:)];
         lp.name = @"Alaa_TikTok";
         lp.minimumPressDuration = 0.9;
@@ -61,13 +102,11 @@ static BOOL TTGIsButton(UIView *v) {
         [self addGestureRecognizer:lp];
     }
     if (!TTGEnabled()) return;
-    if (@available(iOS 13.0, *)) {
-        UITabBarAppearance *ap = [UITabBarAppearance new];
-        [ap configureWithTransparentBackground];
-        ap.shadowColor = UIColor.clearColor;
-        self.standardAppearance = ap;
-        if (@available(iOS 15.0, *)) self.scrollEdgeAppearance = ap;
-    }
+    UITabBarAppearance *ap = [UITabBarAppearance new];
+    [ap configureWithTransparentBackground];
+    ap.shadowColor = UIColor.clearColor;
+    self.standardAppearance = ap;
+    if (@available(iOS 15.0, *)) self.scrollEdgeAppearance = ap;
     self.translucent = YES;
     self.backgroundImage = [UIImage new];
     self.shadowImage = [UIImage new];
@@ -81,8 +120,7 @@ static BOOL TTGIsButton(UIView *v) {
 %new
 - (void)ttg_longPress:(UILongPressGestureRecognizer *)g {
     if (g.state != UIGestureRecognizerStateBegan) return;
-    UIImpactFeedbackGenerator *hf = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
-    [hf impactOccurred];
+    [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium] impactOccurred];
     [self ttg_showMenu];
 }
 
@@ -91,87 +129,134 @@ static BOOL TTGIsButton(UIView *v) {
     UIViewController *top = self.window.rootViewController;
     while (top.presentedViewController) top = top.presentedViewController;
     if (!top) return;
-    NSArray *styles = @[@"Liquid Glass", @"Blur داكن", @"Blur فاتح"];
+    NSArray *styles = @[@"Liquid Glass", @"ضبابي داكن", @"ضبابي فاتح"];
     UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Alaa_TikTok"
-        message:@"إعدادات الشريط الزجاجي\n(الإطفاء الكامل بيتطبّق بعد ما تسكّر TikTok وترجع تفتحه)" preferredStyle:UIAlertControllerStyleActionSheet];
-    __weak UITabBar *weakSelf = self;
-    [ac addAction:[UIAlertAction actionWithTitle:(TTGEnabled() ? @"✅ الشريط الزجاجي: شغّال" : @"⬜️ الشريط الزجاجي: مطفي")
-        style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
-            [TTGDefs() setBool:!TTGEnabled() forKey:kPrefEnabled]; TTGRefreshAll(); [weakSelf ttg_longPressReopen]; }]];
-    [ac addAction:[UIAlertAction actionWithTitle:(TTGFloating() ? @"✅ عائم مدوّر" : @"⬜️ عائم مدوّر (هلق: عرض كامل)")
-        style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
-            [TTGDefs() setBool:!TTGFloating() forKey:kPrefFloating]; TTGRefreshAll(); [weakSelf ttg_longPressReopen]; }]];
-    [ac addAction:[UIAlertAction actionWithTitle:(TTGUnder() ? @"✅ الفيديو تحت الشريط" : @"⬜️ الفيديو تحت الشريط")
-        style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
-            [TTGDefs() setBool:!TTGUnder() forKey:kPrefUnder]; TTGRefreshAll(); [weakSelf ttg_longPressReopen]; }]];
+        message:@"إعدادات الشريط\n(الإطفاء الكامل بيتطبّق بعد ما تسكّر TikTok وترجع تفتحه)" preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak UITabBar *ws = self;
+    void (^toggle)(NSString *, NSString *, BOOL) = ^(NSString *title, NSString *key, BOOL def) {
+        BOOL on = PB(key, def);
+        [ac addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%@ %@", on ? @"✅" : @"⬜️", title]
+            style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
+                [D() setBool:!on forKey:key]; TTGRefreshAll(); [ws ttg_reopen]; }]];
+    };
+    toggle(@"الشريط الزجاجي", kPrefEnabled, YES);
+    toggle(@"كبسولة عائمة (متل انستا)", kPrefFloating, YES);
+    toggle(@"الفيديو تحت الشريط", kPrefUnder, YES);
+    toggle(@"إخفاء الأسماء (أيقونات بس)", kPrefLabels, YES);
     [ac addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"🎨 النمط: %@", styles[MAX(0, MIN(2, TTGStyle()))]]
         style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
-            [TTGDefs() setInteger:(TTGStyle() + 1) % 3 forKey:kPrefStyle];
-            UIView *old = [weakSelf viewWithTag:kGlassTag]; [old removeFromSuperview];
-            TTGRefreshAll(); [weakSelf ttg_longPressReopen]; }]];
+            [D() setInteger:(TTGStyle() + 1) % 3 forKey:kPrefStyle];
+            [[ws viewWithTag:kGlassTag] removeFromSuperview];
+            TTGRefreshAll(); [ws ttg_reopen]; }]];
+    [ac addAction:[UIAlertAction actionWithTitle:@"📋 نسخ هيكل الواجهة (للمطوّر)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
+        NSMutableString *out = [NSMutableString string];
+        UIWindow *w = ws.window;
+        __block void (^dump)(UIView *, int);
+        __block __weak void (^wdump)(UIView *, int);
+        wdump = dump = ^(UIView *v, int d) {
+            if (d > 12) return;
+            CGRect r = [v convertRect:v.bounds toView:w];
+            if (r.size.height >= 300 || [v isKindOfClass:[UITabBar class]] || d < 3)
+                [out appendFormat:@"%@%@ %.0f,%.0f %.0fx%.0f%@\n", [@"" stringByPaddingToLength:d withString:@" " startingAtIndex:0],
+                    NSStringFromClass(v.class), r.origin.x, r.origin.y, r.size.width, r.size.height, v.hidden ? @" H" : @""];
+            for (UIView *s in v.subviews) wdump(s, d + 1);
+        };
+        dump(w, 0);
+        [out appendFormat:@"tabbar %@\n", NSStringFromCGRect([ws convertRect:ws.bounds toView:w])];
+        UIPasteboard.generalPasteboard.string = out;
+    }]];
     [ac addAction:[UIAlertAction actionWithTitle:@"تم" style:UIAlertActionStyleCancel handler:nil]];
     if (ac.popoverPresentationController) { ac.popoverPresentationController.sourceView = self; ac.popoverPresentationController.sourceRect = self.bounds; }
     [top presentViewController:ac animated:YES completion:nil];
 }
 
 %new
-- (void)ttg_longPressReopen {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self ttg_showMenu];
-    });
+- (void)ttg_reopen {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self ttg_showMenu]; });
 }
 
 %new
 - (void)ttg_applyGlass {
-    UIView *existing = [self viewWithTag:kGlassTag];
-    if (!TTGEnabled()) { existing.hidden = YES; return; }
-    existing.hidden = NO;
+    UIView *glass0 = [self viewWithTag:kGlassTag];
+    if (!TTGEnabled()) { glass0.hidden = YES; [self viewWithTag:kSelTag].hidden = YES; return; }
+    glass0.hidden = NO;
     self.backgroundColor = UIColor.clearColor;
     self.clipsToBounds = NO;
 
-    // Hide TikTok's solid background layers, keep the buttons.
+    NSMutableArray<UIView *> *buttons = [NSMutableArray array];
     for (UIView *v in self.subviews) {
-        if (v.tag == kGlassTag) continue;
-        if (TTGIsButton(v)) continue;
-        if ([v isKindOfClass:[UIImageView class]] || [v isKindOfClass:[UIVisualEffectView class]]) {
-            v.hidden = YES;
-            continue;
-        }
+        if (v.tag == kGlassTag || v.tag == kSelTag) continue;
+        if (TTGIsButton(v)) { [buttons addObject:v]; continue; }
+        if ([v isKindOfClass:[UIImageView class]] || [v isKindOfClass:[UIVisualEffectView class]]) { v.hidden = YES; continue; }
         BOOL hasControls = NO;
         for (UIView *s in v.subviews) if (TTGIsButton(s)) { hasControls = YES; break; }
-        if (!hasControls && v.subviews.count == 0) v.hidden = YES; // plain colored strip / divider
+        if (!hasControls && v.subviews.count == 0) v.hidden = YES;
         else v.backgroundColor = UIColor.clearColor;
     }
+    [buttons sortUsingComparator:^NSComparisonResult(UIView *a, UIView *b) { return [@(a.frame.origin.x) compare:@(b.frame.origin.x)]; }];
 
+    CGFloat W = self.bounds.size.width;
     CGFloat bottomInset = self.window ? self.window.safeAreaInsets.bottom : 0;
-    CGFloat barH = self.bounds.size.height - bottomInset;
-    if (barH < 44) barH = MIN(self.bounds.size.height, 60);
-    CGFloat side = TTGFloating() ? 8 : 0, top = TTGFloating() ? 2 : 0;
-    CGRect pill = CGRectMake(side, top, self.bounds.size.width - side * 2, barH - top + (bottomInset > 0 ? 8 : -4));
+    BOOL noLabels = TTGNoLabels();
+    CGRect pill;
+    if (TTGFloating()) {
+        CGFloat h = 62, pw = MIN(W - 56, 340);
+        CGFloat y = self.bounds.size.height - bottomInset - h + (bottomInset > 0 ? 14 : -6);
+        if (y < 0) y = 0;
+        pill = CGRectMake((W - pw) / 2, y, pw, h);
+    } else {
+        pill = self.bounds;
+    }
 
-    UIVisualEffectView *glass = (UIVisualEffectView *)[self viewWithTag:kGlassTag];
+    UIVisualEffectView *glass = (UIVisualEffectView *)glass0;
     if (!glass) {
         glass = [[UIVisualEffectView alloc] initWithEffect:TTGEffect()];
         glass.tag = kGlassTag;
-        if (@available(iOS 13.0, *)) glass.overrideUserInterfaceStyle = (TTGStyle() == 2) ? UIUserInterfaceStyleLight : UIUserInterfaceStyleDark;
         glass.userInteractionEnabled = NO;
         glass.clipsToBounds = YES;
-        glass.layer.borderWidth = 0.6;
-        glass.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.18].CGColor;
-        UIView *tint = [[UIView alloc] init];
-        tint.backgroundColor = [UIColor colorWithWhite:0 alpha:(TTGStyle() == 2 ? 0.0 : 0.18)];
-        tint.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        [glass.contentView addSubview:tint];
+        glass.overrideUserInterfaceStyle = (TTGStyle() == 2) ? UIUserInterfaceStyleLight : UIUserInterfaceStyleDark;
+        glass.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.14].CGColor;
         [self insertSubview:glass atIndex:0];
-    } else if ([self.subviews indexOfObject:glass] != 0) {
+    } else if (self.subviews.firstObject != glass) {
         [self sendSubviewToBack:glass];
     }
     glass.frame = pill;
-    if (!TTGFloating()) pill = self.bounds;
     glass.layer.cornerRadius = TTGFloating() ? pill.size.height / 2 : 0;
+    glass.layer.cornerCurve = kCACornerCurveContinuous;
     glass.layer.borderWidth = TTGFloating() ? 0.6 : 0;
-    if (@available(iOS 13.0, *)) glass.layer.cornerCurve = kCACornerCurveContinuous;
-    for (UIView *t in glass.contentView.subviews) t.frame = glass.bounds;
+
+    // Instagram-style layout: buttons spread evenly inside the pill.
+    if (TTGFloating() && buttons.count >= 3) {
+        CGFloat inset = 6, slot = (pill.size.width - inset * 2) / buttons.count;
+        for (NSUInteger i = 0; i < buttons.count; i++) {
+            UIView *b = buttons[i];
+            CGRect f = b.frame;
+            f.size.width = MIN(f.size.width, slot);
+            f.origin.x = pill.origin.x + inset + slot * i + (slot - f.size.width) / 2;
+            f.origin.y = pill.origin.y + (pill.size.height - f.size.height) / 2 + (noLabels ? 7 : 0);
+            b.frame = f;
+        }
+    }
+    for (UIView *b in buttons) TTGSetLabelsHidden(b, noLabels);
+
+    // highlight capsule behind the selected tab
+    UIView *sel = [self viewWithTag:kSelTag];
+    if (!sel) {
+        sel = [UIView new];
+        sel.tag = kSelTag;
+        sel.userInteractionEnabled = NO;
+        sel.backgroundColor = [UIColor colorWithWhite:1 alpha:0.16];
+        [self insertSubview:sel aboveSubview:glass];
+    }
+    UIView *selBtn = nil;
+    for (UIView *b in buttons) if (TTGIsSelected(b)) { selBtn = b; break; }
+    if (selBtn && TTGFloating()) {
+        CGFloat slot = (pill.size.width - 12) / MAX(1, buttons.count);
+        CGFloat sw = MIN(slot + 8, 86), sh = pill.size.height - 10;
+        sel.frame = CGRectMake(CGRectGetMidX(selBtn.frame) - sw / 2, pill.origin.y + 5, sw, sh);
+        sel.layer.cornerRadius = sh / 2;
+        sel.hidden = NO;
+    } else sel.hidden = YES;
 }
 
 %end
@@ -184,31 +269,25 @@ static void TTGRefreshAll(void) {
     for (UIWindow *w in UIApplication.sharedApplication.windows) TTGRefreshIn(w);
 }
 
-// TikTok paints a black strip behind the tab bar on some screens.
 %hook AWENormalModeTabBarController
 - (void)viewDidLayoutSubviews {
     %orig;
     UIViewController *vc = (UIViewController *)self;
-    if (![vc respondsToSelector:@selector(tabBar)]) return;
+    if (![vc respondsToSelector:@selector(tabBar)] || !TTGEnabled()) return;
     UITabBar *tb = [(id)vc tabBar];
-    if (!tb || !TTGEnabled()) return;
     UIView *root = vc.view;
-    // the view that holds the tab bar directly under root
+    if (!tb || !root.window) return;
     UIView *barHost = tb;
     while (barHost.superview && barHost.superview != root) barHost = barHost.superview;
     barHost.backgroundColor = UIColor.clearColor;
     tb.superview.backgroundColor = UIColor.clearColor;
     if (!TTGUnder()) return;
-    CGFloat barTop = [tb convertRect:tb.bounds toView:root].origin.y;
-    CGFloat fullH = root.bounds.size.height;
-    for (UIView *v in root.subviews) {
-        if (v == barHost || v.hidden) continue;
-        CGRect f = v.frame;
-        if (fabs(CGRectGetMaxY(f) - barTop) < 3 && f.size.height > fullH * 0.5) {
-            f.size.height = fullH - f.origin.y;
-            v.frame = f;
-        }
-    }
+    UIWindow *w = root.window;
+    CGFloat barTop = [tb convertRect:tb.bounds toView:w].origin.y;
+    CGFloat bottom = w.bounds.size.height;
+    if (bottom - barTop < 20) return;
+    TTGExtend(root, barTop, bottom, barHost, 0);
+    root.backgroundColor = UIColor.clearColor;
     [root bringSubviewToFront:barHost];
 }
 %end
