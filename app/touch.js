@@ -3,13 +3,52 @@
 window.APTouch=!!(window.APForceTouch||(navigator.maxTouchPoints>0&&matchMedia('(pointer:coarse)').matches));
 if(!window.APTouch)return;
 document.body.classList.add('touch');
-var back=document.createElement('button');back.id='touch-back';back.textContent='‹';back.setAttribute('aria-label','Back');back.onclick=function(){if(!document.getElementById('player').hidden){document.getElementById('stop').click();return;}if(window.apTouchBack)window.apTouchBack();};document.body.appendChild(back);
+/* 2.9: one icon set for the whole touch UI. 24px grid, 1.8 stroke, round caps and joins,
+   drawn inside a 3..21 box so every glyph sits on the same optical size. No emoji anywhere. */
+var IC=function(body,fill){return '<svg class="ap-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" fill="'+(fill?'currentColor':'none')+'" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+body+'</svg>';};
+var APIcons=window.APIcons={
+ home:IC('<path d="M4 10.4 12 4l8 6.4V19a1 1 0 0 1-1 1h-4.2v-5.6H9.2V20H5a1 1 0 0 1-1-1z"/>'),
+ live:IC('<rect x="3" y="6.5" width="18" height="13" rx="2.6"/><path d="M8.5 3 12 6.3 15.5 3"/><circle cx="12" cy="13" r="2.2" fill="currentColor" stroke="none"/>'),
+ movies:IC('<rect x="3" y="4" width="18" height="16" rx="2.6"/><path d="M7.5 4v16M16.5 4v16M3 9.3h4.5M3 14.7h4.5M16.5 9.3H21M16.5 14.7H21"/>'),
+ series:IC('<rect x="3" y="8" width="18" height="12" rx="2.6"/><path d="M6 5h12M8.5 2.6h7"/><path d="M10.4 11.3v5.4l4.4-2.7z" fill="currentColor"/>'),
+ heart:IC('<path d="M12 19.6s-7.6-4.5-7.6-10A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 7.6 2.6c0 5.5-7.6 10-7.6 10z"/>'),
+ heartFill:IC('<path d="M12 19.6s-7.6-4.5-7.6-10A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 7.6 2.6c0 5.5-7.6 10-7.6 10z"/>',true),
+ recent:IC('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.6V12l3 2"/>'),
+ search:IC('<circle cx="10.8" cy="10.8" r="6.6"/><path d="m15.8 15.8 4.6 4.6"/>'),
+ settings:IC('<path d="M4 7h9M17.5 7H20M4 17h2.5M11 17h9"/><circle cx="15.2" cy="7" r="2.3"/><circle cx="8.8" cy="17" r="2.3"/>'),
+ play:IC('<path d="M8 5.6v12.8a1 1 0 0 0 1.5.86l10-6.4a1 1 0 0 0 0-1.72l-10-6.4A1 1 0 0 0 8 5.6z" stroke-width="1.2"/>',true),
+ pause:IC('<rect x="6.5" y="5" width="3.8" height="14" rx="1.2" stroke="none"/><rect x="13.7" y="5" width="3.8" height="14" rx="1.2" stroke="none"/>',true),
+ resume:IC('<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4h4"/><path d="M10.6 9.3v5.4l4.2-2.7z" fill="currentColor"/>'),
+ clock:IC('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.6V12l3 2"/>'),
+ check:IC('<path d="m5.5 12.5 4.2 4.2 8.8-9.4"/>'),
+ info:IC('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.2"/><circle cx="12" cy="7.9" r=".6" fill="currentColor"/>'),
+ back:IC('<path d="M14.5 5.5 8 12l6.5 6.5"/>'),
+ forward:IC('<path d="M9.5 5.5 16 12l-6.5 6.5"/>'),
+ menu:IC('<path d="M4.5 7h15M4.5 12h15M4.5 17h15"/>'),
+ close:IC('<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>'),
+ retry:IC('<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/>'),
+ audio:IC('<path d="M9 17.5V6.5l10-2v11"/><circle cx="6.8" cy="17.5" r="2.3"/><circle cx="16.8" cy="15.5" r="2.3"/>'),
+ subtitles:IC('<rect x="3" y="5.5" width="18" height="13" rx="2.6"/><path d="M7 13.5h4M13.5 13.5H17M7 10h6.5"/>'),
+ aspect:IC('<rect x="3" y="5.5" width="18" height="13" rx="2.6"/><path d="M7.5 9.5H6.5v2M16.5 9.5h1v2M7.5 14.5H6.5v-2M16.5 14.5h1v-2"/>'),
+ fullscreen:IC('<path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/>'),
+ more:IC('<circle cx="5.5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.6" fill="currentColor" stroke="none"/>'),
+ grid:IC('<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>'),
+ grip:IC('<circle cx="9" cy="6.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="6.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="17.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="17.5" r="1.3" fill="currentColor" stroke="none"/>'),
+ star:IC('<path d="m12 3.8 2.5 5.1 5.6.8-4 3.9 1 5.6-5.1-2.6-5 2.6 1-5.6-4.1-3.9 5.6-.8z"/>',true),
+ boxOn:IC('<rect x="4" y="4" width="16" height="16" rx="4"/><path d="m8 12.2 2.8 2.8L16.2 9.4"/>'),
+ boxOff:IC('<rect x="4" y="4" width="16" height="16" rx="4"/>')
+};
+// Glyphs that iOS may draw as colour emoji (▶ ♥ ☑) or as missing boxes (ⓘ), mapped to the set above.
+var APGlyphs={'\u25B6':'play','\u25B7':'play','\u23F5':'play','\u23F8':'pause','\u23E9':'forward','\u23EA':'back','\u2665':'heartFill','\u2764':'heartFill','\u2661':'heart','\u25F7':'clock','\u24D8':'info','\u2139':'info','\u2611':'boxOn','\u2610':'boxOff','\u25A3':'live','\u25A4':'movies','\u25A6':'series','\u2315':'search','\u2B50':'star'};
+window.APGlyphs=APGlyphs;
+var back=document.createElement('button');back.id='touch-back';back.innerHTML=APIcons.back;back.setAttribute('aria-label','Back');back.onclick=function(){if(!document.getElementById('player').hidden){document.getElementById('stop').click();return;}if(window.apTouchBack)window.apTouchBack();};document.body.appendChild(back);
 function railSelect(i){var r=document.getElementById('phone-home-rail');if(r)r.querySelectorAll('button').forEach(function(x){x.classList.toggle('selected',Number(x.dataset.railIndex)===i);});}
 function updateBack(){if(!document.getElementById('home').hidden)railSelect(0);document.body.classList.toggle('phone-home',!document.getElementById('home').hidden&&document.getElementById('connection').hidden&&document.getElementById('player').hidden);back.hidden=!document.getElementById('home').hidden&&document.getElementById('connection').hidden&&document.getElementById('player').hidden;}
 new MutationObserver(updateBack).observe(document.getElementById('screen'),{subtree:true,attributes:true,attributeFilter:['hidden']});updateBack();
+document.querySelectorAll('nav button').forEach(function(b){var k=b.id==='nav-home'?'home':b.id==='nav-favorites'?'heart':b.id==='nav-recent'?'recent':b.id==='nav-search'?'search':b.id==='settings-open'?'settings':b.dataset.kind;var i=b.querySelector('.nav-icon');if(i&&APIcons[k])i.innerHTML=APIcons[k];});
 var rail=document.createElement('aside');rail.id='phone-home-rail';var logo=document.querySelector('.brand').cloneNode(true);logo.removeAttribute('id');var version=logo.querySelector('#app-display-version');if(version){version.removeAttribute('id');}rail.appendChild(logo);
 var targets=['#nav-home','nav [data-kind="live"]','nav [data-kind="movies"]','nav [data-kind="series"]','#nav-favorites','#nav-search','#settings-open'];
-targets.forEach(function(selector,index){var original=document.querySelector(selector);if(!original&&index===4)original=document.querySelector('nav button:nth-last-child(2)');if(!original)return;var b=document.createElement('button');b.className=index===0?'selected':'';var icon=original.querySelector('.nav-icon');if(icon)b.appendChild(icon.cloneNode(true));var label=document.createElement('span');label.textContent=['الرئيسية','البث المباشر','الأفلام','المسلسلات','المفضلة','البحث','الإعدادات'][index];b.appendChild(label);b.dataset.railIndex=index;b.onclick=function(){original.click();if(index<6)railSelect(index);};rail.appendChild(b);});document.body.appendChild(rail);
+targets.forEach(function(selector,index){var original=document.querySelector(selector);if(!original&&index===4)original=document.querySelector('nav button:nth-last-child(2)');if(!original)return;var b=document.createElement('button');b.className=index===0?'selected':'';var icon=document.createElement('span');icon.className='nav-icon';icon.innerHTML=APIcons[['home','live','movies','series','heart','search','settings'][index]];b.appendChild(icon);var label=document.createElement('span');label.className='rail-label';label.textContent=['الرئيسية','البث المباشر','الأفلام','المسلسلات','المفضلة','البحث','الإعدادات'][index];b.appendChild(label);b.dataset.railIndex=index;b.onclick=function(){original.click();if(index<6)railSelect(index);};rail.appendChild(b);});document.body.appendChild(rail);
 
 function playerMode(){var playing=!document.getElementById('player').hidden;document.body.classList.toggle('phone-live-playing',playing&&document.getElementById('player').dataset.playbackKind==='live');document.body.classList.toggle('phone-library',document.getElementById('home').hidden&&!playing&&document.getElementById('connection').hidden);document.body.classList.toggle('phone-playing',playing);document.body.classList.toggle('phone-detail',!document.getElementById('movie-detail').hidden||!document.getElementById('series-detail').hidden);if(playing)document.body.classList.remove('touch-nav-open');}
 new MutationObserver(playerMode).observe(document.getElementById('player'),{attributes:true,attributeFilter:['hidden','data-playback-kind']});playerMode();new MutationObserver(playerMode).observe(document.getElementById("screen"),{subtree:true,attributes:true,attributeFilter:["hidden"]});
@@ -18,7 +57,7 @@ var controls=document.querySelector('#player-ui .actions');
 ['red-sub','red-audio','red-aspect','red-fs'].forEach(function(id){var b=document.getElementById(id);if(b)controls.appendChild(b);});
 var icons={'stop':['‹','خروج'],'pause':['Ⅱ','تشغيل'],'seek-back':['↶','رجوع 30'],'seek-forward':['↷','تقديم 30'],'retry':['↻','إعادة'],'f21-speed':['1×','السرعة'],'red-sub':['CC','الترجمة'],'red-audio':['♫','الصوت'],'red-aspect':['□','المقاس'],'red-fs':['⛶','ملء الشاشة'],'quick-toggle':['▤','مشابه'],'phone-aspect':['▭','المقاس']};
 Object.keys(icons).forEach(function(id){var b=document.getElementById(id);if(!b)return;b.dataset.phoneIcon=icons[id][0];b.dataset.phoneLabel=icons[id][1];});
-var playerBack=document.createElement('button');playerBack.id='phone-player-back';playerBack.type='button';playerBack.textContent='‹';playerBack.setAttribute('aria-label','رجوع');playerBack.onclick=function(){document.getElementById('stop').click();};document.getElementById('player').appendChild(playerBack);
+var playerBack=document.createElement('button');playerBack.id='phone-player-back';playerBack.type='button';playerBack.innerHTML=APIcons.back;playerBack.setAttribute('aria-label','رجوع');playerBack.onclick=function(){document.getElementById('stop').click();};document.getElementById('player').appendChild(playerBack);
 function syncPlayerBack(){var player=document.getElementById('player'),live=document.getElementById('live-now'),ui=document.getElementById('player-ui');var hide=player.hidden||(player.dataset.playbackKind==='live'?(!live||live.hidden):ui.classList.contains('dim'));if(playerBack.hidden!==hide)playerBack.hidden=hide;}
 new MutationObserver(syncPlayerBack).observe(document.getElementById('player'),{subtree:true,attributes:true,attributeFilter:['hidden','class']});syncPlayerBack();
 var more=document.createElement('button');more.id='phone-more';more.type='button';more.dataset.phoneIcon='•••';more.dataset.phoneLabel='المزيد';more.setAttribute('aria-label','المزيد');controls.appendChild(more);
@@ -31,7 +70,7 @@ function fmtClock(t){t=Math.max(0,Math.floor(t||0));return (t>=3600?Math.floor(t
 document.getElementById('video').addEventListener('timeupdate',function(){var v=this;clock.firstChild.textContent=fmtClock(v.currentTime);clock.lastChild.textContent='−'+fmtClock(v.duration-v.currentTime);var pct=v.duration>0?v.currentTime/v.duration*100:0;var buffered=v.buffered.length&&v.duration>0?v.buffered.end(v.buffered.length-1)/v.duration*100:pct;document.getElementById('progress').style.setProperty('--cinema-played',pct+'%');document.getElementById('progress').style.setProperty('--cinema-buffer',buffered+'%');});
 function cinemaDuration(){var v=document.getElementById('video'),el=info.querySelector('.cinema-duration');if(el){var d=Number(v.duration);el.textContent=isFinite(d)&&d>0?'• '+Math.floor(d/60)+' د':'';}}
 ['loadedmetadata','durationchange','timeupdate'].forEach(function(event){document.getElementById('video').addEventListener(event,cinemaDuration);});
-function cinemaInfo(){var episode=document.getElementById('player').dataset.playbackKind==='episode';var name=document.getElementById('playing-name').textContent;info.querySelector('h1').textContent=name;info.querySelector('.cinema-kicker').textContent=episode?'مسلسل':'فيلم';var metadata=document.getElementById(episode?'series-meta':'movie-meta').textContent;var rating=metadata.match(/(?:★\s*([0-9.]+)|([0-9.]+)\s*★)/);var meta=info.querySelector('.cinema-meta');meta.replaceChildren();if(rating){var chip=document.createElement('span');chip.className='cinema-rating';chip.textContent=rating[1]||rating[2];meta.appendChild(chip);}var rest=document.createElement('span');rest.textContent=metadata.replace(/★\s*[0-9.]+|[0-9.]+\s*★/,'').replace(/HD\s*[•·]?/,'').replace(/([•·])\s*[•·]/g,'•');meta.appendChild(rest);var duration=document.createElement('span');duration.className='cinema-duration';meta.appendChild(duration);cinemaDuration();info.querySelector('p').textContent=document.getElementById(episode?'series-description':'movie-description').textContent;top.querySelector('.cinema-brand').textContent=({harak:'NOIR · OR',alaa:'NOIR · OR',red:'ROUGE VELOURS'})[document.body.dataset.theme]||'ALAA PLAYER';}
+function cinemaInfo(){var episode=document.getElementById('player').dataset.playbackKind==='episode';var name=document.getElementById('playing-name').textContent;var h1=info.querySelector('h1');h1.textContent=name;var len=String(name||'').trim().length;h1.dataset.len=len>64?'xl':len>40?'l':len>24?'m':'s';h1.title=name;info.querySelector('.cinema-kicker').textContent=episode?'مسلسل':'فيلم';var metadata=document.getElementById(episode?'series-meta':'movie-meta').textContent;var rating=metadata.match(/(?:★\s*([0-9.]+)|([0-9.]+)\s*★)/);var meta=info.querySelector('.cinema-meta');meta.replaceChildren();if(rating){var chip=document.createElement('span');chip.className='cinema-rating';chip.textContent=rating[1]||rating[2];meta.appendChild(chip);}var rest=document.createElement('span');rest.textContent=metadata.replace(/★\s*[0-9.]+|[0-9.]+\s*★/,'').replace(/HD\s*[•·]?/,'').replace(/([•·])\s*[•·]/g,'•');meta.appendChild(rest);var duration=document.createElement('span');duration.className='cinema-duration';meta.appendChild(duration);cinemaDuration();info.querySelector('p').textContent=document.getElementById(episode?'series-description':'movie-description').textContent;top.querySelector('.cinema-brand').textContent=({harak:'NOIR · OR',alaa:'NOIR · OR',red:'ROUGE VELOURS'})[document.body.dataset.theme]||'ALAA PLAYER';}
 new MutationObserver(cinemaInfo).observe(document.getElementById('playing-name'),{childList:true,subtree:true});cinemaInfo();
 var sheet=document.createElement('div');sheet.id='phone-more-sheet';sheet.hidden=true;sheet.setAttribute('role','dialog');sheet.setAttribute('aria-label','خيارات المشغّل');
 var close=document.createElement('button');close.textContent='إغلاق';close.onclick=function(){sheet.hidden=true;document.dispatchEvent(new Event('ap-vod-controls'));};sheet.appendChild(close);
@@ -39,16 +78,18 @@ var close=document.createElement('button');close.textContent='إغلاق';close.
 document.getElementById('player').appendChild(sheet);
 av.onclick=function(){sheet.hidden=true;if(window.APTracks)window.APTracks.toggle();document.dispatchEvent(new Event('ap-vod-controls'));};
 more.onclick=function(){if(window.APTracks)window.APTracks.close();sheet.hidden=!sheet.hidden;document.dispatchEvent(new Event('ap-vod-controls'));};
-window.APLabelControls=function(){labelControls();};function labelControls(){Object.keys(icons).concat(['phone-more']).forEach(function(id){var b=document.getElementById(id);if(!b)return;var icon=b.querySelector('.phone-control-icon'),label=b.querySelector('.phone-control-label');if(!icon||!label){b.replaceChildren();icon=document.createElement('span');icon.className='phone-control-icon';label=document.createElement('span');label.className='phone-control-label';b.appendChild(icon);b.appendChild(label);}var glyph=id==='quick-toggle'?'⊞':id==='pause'?(document.getElementById('video').paused?'▶':'Ⅱ'):b.dataset.phoneIcon;var art=null;
+window.APLabelControls=function(){labelControls();};function labelControls(){Object.keys(icons).concat(['phone-more']).forEach(function(id){var b=document.getElementById(id);if(!b)return;var icon=b.querySelector('.phone-control-icon'),label=b.querySelector('.phone-control-label');if(!icon||!label){b.replaceChildren();icon=document.createElement('span');icon.className='phone-control-icon';label=document.createElement('span');label.className='phone-control-label';b.appendChild(icon);b.appendChild(label);}var glyph=b.dataset.phoneIcon;var paused=document.getElementById('video').paused;var art=({'stop':APIcons.back,'pause':paused?APIcons.play:APIcons.pause,'retry':APIcons.retry,'red-sub':APIcons.subtitles,'red-audio':APIcons.audio,'red-aspect':APIcons.aspect,'red-fs':APIcons.fullscreen,'phone-more':APIcons.more})[id]||null;var artKey=id==='pause'?(paused?'pause-play':'pause-pause'):id;
 if(id==='quick-toggle')art='<svg viewBox="0 0 28 28" width="25" height="25" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="8" height="8" rx="1.5"/><rect x="16" y="4" width="8" height="8" rx="1.5"/><rect x="4" y="16" width="8" height="8" rx="1.5"/><rect x="16" y="16" width="8" height="8" rx="1.5"/></svg>';
 // Separate paths: a CSS flip on the <svg> was overridden by the bar's transform reset, so both read counter-clockwise.
 if(id==='seek-back')art='<svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 8a11 11 0 1 1-3 10M8 3v6H2"/><text x="16" y="21" text-anchor="middle" fill="currentColor" stroke="none" font-family="Arial" font-size="11" font-weight="600">30</text></svg>';
 if(id==='seek-forward')art='<svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M24 8a11 11 0 1 0 3 10M24 3v6h6"/><text x="16" y="21" text-anchor="middle" fill="currentColor" stroke="none" font-family="Arial" font-size="11" font-weight="600">30</text></svg>';
 if(id==='phone-aspect')art='<svg viewBox="0 0 28 28" width="25" height="25" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="6.5" width="21" height="15" rx="2"/><path d="M8 10.5H6.5v3M20 10.5h1.5v3M8 17.5H6.5v-3M20 17.5h1.5v-3"/></svg>';
-if(art){if(icon.dataset.art!==id){icon.innerHTML=art;icon.dataset.art=id;}}else if(icon.textContent!==glyph)icon.textContent=glyph;var caption=id==='pause'?(document.getElementById('video').paused?'تشغيل':'إيقاف مؤقت'):id==='phone-aspect'&&window.APScreen?window.APScreen.label():b.dataset.phoneLabel;if(label.textContent!==caption)label.textContent=caption;});}
+if(art){if(icon.dataset.art!==artKey){icon.innerHTML=art;icon.dataset.art=artKey;}}else if(icon.textContent!==glyph)icon.textContent=glyph;var caption=id==='pause'?(document.getElementById('video').paused?'تشغيل':'إيقاف مؤقت'):id==='phone-aspect'&&window.APScreen?window.APScreen.label():b.dataset.phoneLabel;if(label.textContent!==caption)label.textContent=caption;});}
 
 function paintDetailButtons(){
-[['movie-play','▶','تشغيل'],['movie-resume','↶','متابعة'],['movie-favorite','♡','المفضلة'],['series-continue','▶','متابعة'],['series-start','▶','تشغيل'],['series-favorite','♡','المفضلة'],['series-later','◷','لاحقاً'],['series-info','ⓘ','المزيد']].forEach(function(row){var b=document.getElementById(row[0]);if(!b)return;if(b.children.length===2&&b.firstChild.className==='detail-icon'&&b.lastChild.textContent===row[2])return;var icon=document.createElement('span');icon.className='detail-icon';icon.textContent=row[1];var label=document.createElement('small');label.textContent=row[2];b.replaceChildren(icon,label);});
+[['movie-play','play','تشغيل'],['movie-resume','resume','متابعة'],['movie-favorite','heart','المفضلة'],['series-continue','play','متابعة'],['series-start','play','تشغيل'],['series-info','info','المزيد'],['series-favorite','heart','المفضلة'],['series-later','clock','لاحقاً']].forEach(function(row){var b=document.getElementById(row[0]);if(!b)return;if(b.children.length===2&&b.firstChild.className==='detail-icon'&&b.lastChild.textContent===row[2])return;
+var text=b.textContent||'',on=row[1]==='heart'?/\u2665|\u2764/.test(text):row[1]==='clock'?/\u2713/.test(text):false;
+var icon=document.createElement('span');icon.className='detail-icon';icon.innerHTML=APIcons[row[1]==='heart'&&on?'heartFill':row[1]==='clock'&&on?'check':row[1]];var label=document.createElement('small');label.textContent=row[2];b.classList.toggle('ap-on',on);b.classList.add('ap-detail-btn');b.classList.toggle('ap-primary',/^(movie-play|series-continue|series-start)$/.test(row[0]));b.replaceChildren(icon,label);});
 }
 paintDetailButtons();
 new MutationObserver(paintDetailButtons).observe(document.getElementById('series-copy'),{subtree:true,childList:true});
@@ -61,7 +102,7 @@ document.getElementById('video').addEventListener('play',labelControls);document
 var playerObserver=new MutationObserver(function(){if(document.getElementById('player').hidden)sheet.hidden=true;});playerObserver.observe(document.getElementById('player'),{attributes:true,attributeFilter:['hidden']});
 
 });
-var menu=document.createElement('button');menu.id='touch-menu';menu.textContent='☰';menu.setAttribute('aria-label','Navigation');menu.onclick=function(){document.body.classList.toggle('touch-nav-open');};document.body.appendChild(menu);
+var menu=document.createElement('button');menu.id='touch-menu';menu.innerHTML=APIcons.menu;menu.setAttribute('aria-label','Navigation');menu.onclick=function(){document.body.classList.toggle('touch-nav-open');};document.body.appendChild(menu);
 document.querySelector('nav').addEventListener('click',function(e){if(e.target.closest('button'))document.body.classList.remove('touch-nav-open');});
 document.addEventListener('click',function(e){var b=e.target.closest('button');if(b){try{b.focus({preventScroll:true});}catch(_){b.focus();}}},true);
 // Native scrolling must not be intercepted or converted into a second activation.
@@ -117,7 +158,7 @@ new MutationObserver(function(){if(player.hidden)clearWebAspect();else applyAspe
 
 /* ---------- audio & subtitles ---------- */
 var panel=el('div','ap-av-panel');panel.hidden=true;panel.setAttribute('role','dialog');panel.setAttribute('aria-label','الصوت والترجمة');
-var head=el('div',null,'ap-av-head');head.appendChild(el('h3',null,null,'الصوت والترجمة'));var x=el('button','ap-av-close',null,'✕');x.type='button';x.setAttribute('aria-label','إغلاق');head.appendChild(x);panel.appendChild(head);
+var head=el('div',null,'ap-av-head');head.appendChild(el('h3',null,null,'الصوت والترجمة'));var x=el('button','ap-av-close');x.innerHTML=APIcons.close;x.type='button';x.setAttribute('aria-label','إغلاق');head.appendChild(x);panel.appendChild(head);
 var cols=el('div',null,'ap-av-cols'),audioCol=el('section',null,'ap-av-col'),textCol=el('section',null,'ap-av-col');cols.appendChild(audioCol);cols.appendChild(textCol);panel.appendChild(cols);player.appendChild(panel);
 var tracksGen=0;
 function trackName(t,n,kind){var lang=String(t.language||'').toLowerCase(),name=String(t.name||t.label||'').trim();
@@ -208,7 +249,7 @@ document.addEventListener('click',function(e){if(Date.now()<suppressUntil&&e.tar
 document.addEventListener('contextmenu',function(e){if(e.target.closest&&e.target.closest('#categories,#items'))e.preventDefault();});
 
 var ROW=52,reorder=el('div','ap-reorder');reorder.hidden=true;reorder.setAttribute('role','dialog');reorder.setAttribute('aria-modal','true');
-var rSheet=el('div',null,'ap-reorder-sheet'),rHead=el('div',null,'ap-reorder-head'),rTitle=el('h3'),rHint=el('p',null,null,'اسحب ⠿ لتحريك العنصر للأعلى أو للأسفل');
+var rSheet=el('div',null,'ap-reorder-sheet'),rHead=el('div',null,'ap-reorder-head'),rTitle=el('h3'),rHint=el('p',null,null,'اسحب المقبض لتحريك العنصر للأعلى أو للأسفل');
 var rTools=el('div',null,'ap-reorder-tools'),rDone=el('button','ap-reorder-done',null,'تم'),rReset=el('button','ap-reorder-reset',null,'إعادة الترتيب الافتراضي'),rCancel=el('button','ap-reorder-cancel',null,'إلغاء');
 [rDone,rReset,rCancel].forEach(function(b){b.type='button';rTools.appendChild(b);});
 var rTitleBox=el('div');rTitleBox.appendChild(rTitle);rTitleBox.appendChild(rHint);rHead.appendChild(rTitleBox);rHead.appendChild(rTools);
@@ -222,7 +263,7 @@ function openReorder(t){R.target=t;var rows=window.APReorder.rows(t);R.order=row
 function closeReorder(){reorder.hidden=true;document.body.classList.remove('ap-reordering');endDrag();R.target=null;}
 function rowNode(id){var n=R.nodes.get(id);if(n)return n;var r=R.rows.get(id)||{label:id};n=el('div',null,'ap-reorder-row');n.dataset.id=id;var num=el('span',null,'ap-reorder-num');n.appendChild(num);
  if(r.logo){var img=document.createElement('img');img.alt='';img.loading='lazy';img.referrerPolicy='no-referrer';img.src=r.logo;img.onerror=function(){img.remove();};n.appendChild(img);}
- n.appendChild(el('span',null,'ap-reorder-label',r.label));var h=el('span',null,'ap-reorder-handle','⠿');h.setAttribute('aria-hidden','true');n.appendChild(h);rInner.appendChild(n);R.nodes.set(id,n);return n;}
+ n.appendChild(el('span',null,'ap-reorder-label',r.label));var h=el('span',null,'ap-reorder-handle');h.innerHTML=APIcons.grip;h.setAttribute('aria-hidden','true');n.appendChild(h);rInner.appendChild(n);R.nodes.set(id,n);return n;}
 function paint(){var top=rList.scrollTop,h=rList.clientHeight||400,first=Math.max(0,Math.floor(top/ROW)-6),last=Math.min(R.order.length,Math.ceil((top+h)/ROW)+6),keep=new Set();
  for(var i=first;i<last;i++){var id=R.order[i];keep.add(id);var n=rowNode(id);n.firstChild.textContent=String(i+1);if(!R.drag||R.drag.id!==id)n.style.transform='translate3d(0,'+(i*ROW)+'px,0)';}
  if(R.drag)keep.add(R.drag.id);
@@ -249,4 +290,31 @@ reorder.addEventListener('click',function(e){if(e.target===reorder)closeReorder(
 // The toast lives in the player; outside it, reuse the app toast element if present.
 var baseSay=say;say=function(text,ms){if(player.hidden){var t=document.getElementById('f21-toast');if(t){t.textContent=text;t.hidden=false;clearTimeout(t._timer);t._timer=setTimeout(function(){t.hidden=true;},ms||2200);return;}}baseSay(text,ms);};
 });
+
+/* 2.9: which side the notch is on. iOS reports the same safe-area inset on both sides in
+   landscape, so the side without the notch would otherwise lose ~47pt for nothing. */
+function notchSide(){var o=typeof window.orientation==='number'?window.orientation:null,a=null;
+ if(o===null&&screen.orientation&&typeof screen.orientation.angle==='number'){a=screen.orientation.angle;o=a===90?90:a===270?-90:0;}
+ var land=innerWidth>innerHeight,cl=document.body.classList;cl.toggle('ip-land',land);
+ cl.toggle('ip-notch-left',land&&o===90);cl.toggle('ip-notch-right',land&&o===-90);}
+notchSide();addEventListener('resize',notchSide);addEventListener('orientationchange',function(){notchSide();setTimeout(notchSide,250);});
+if(screen.orientation&&screen.orientation.addEventListener)screen.orientation.addEventListener('change',notchSide);
+
+/* 2.9: replace icon glyphs (emoji on iOS) with the SVG set wherever the app writes them. */
+var glyphRe=new RegExp('['+Object.keys(APGlyphs).join('')+']\uFE0F?','g');
+var glyphHost='button,.row-heart,#cover,.tile-icon,.continue-copy,.detail-icon';
+function swapGlyphs(node){if(!node)return;if(node.nodeType===3){swapText(node);return;}if(node.nodeType!==1||node.closest&&node.closest('svg,input,textarea,select,script,style'))return;
+ var w=document.createTreeWalker(node,NodeFilter.SHOW_TEXT,null),list=[],t;while((t=w.nextNode()))if(glyphRe.test(t.nodeValue)){glyphRe.lastIndex=0;list.push(t);}glyphRe.lastIndex=0;list.forEach(swapText);}
+function swapText(t){var v=t.nodeValue;if(!v||!t.parentNode)return;glyphRe.lastIndex=0;if(!glyphRe.test(v))return;glyphRe.lastIndex=0;var host=t.parentNode.closest&&t.parentNode.closest(glyphHost);if(!host||t.parentNode.closest('svg'))return;
+ var frag=document.createDocumentFragment(),names=[],m;while((m=glyphRe.exec(v)))names.push(APGlyphs[m[0].charAt(0)]);glyphRe.lastIndex=0;
+ names.forEach(function(n){var i=document.createElement('span');i.className='ap-ico ap-ico-'+n;i.innerHTML=APIcons[n];frag.appendChild(i);});
+ var rest=v.replace(glyphRe,' ').replace(/\s+/g,' ').trim();if(rest)frag.appendChild(document.createTextNode(rest));if(host.tagName==='BUTTON')host.classList.add('ap-has-ico');t.parentNode.replaceChild(frag,t);}
+var pending=[],queued=false;
+function flushGlyphs(){queued=false;var l=pending;pending=[];l.forEach(swapGlyphs);}
+new MutationObserver(function(records){records.forEach(function(r){if(r.type==='characterData')pending.push(r.target);else r.addedNodes.forEach(function(n){pending.push(n);});});if(!queued&&pending.length){queued=true;(window.requestAnimationFrame||setTimeout)(flushGlyphs);}}).observe(document.body,{subtree:true,childList:true,characterData:true});
+swapGlyphs(document.body);document.addEventListener('DOMContentLoaded',function(){swapGlyphs(document.body);});
+
+/* 2.9: when there is nothing to continue, the latest-movies row takes that slot on the phone home. */
+function continueState(){var c=document.getElementById('f21-continue');document.body.classList.toggle('ip-no-continue',!c||c.hidden);}
+document.addEventListener('DOMContentLoaded',function(){var c=document.getElementById('f21-continue');if(c)new MutationObserver(continueState).observe(c,{attributes:true,attributeFilter:['hidden']});continueState();});
 })();
