@@ -61,6 +61,22 @@ static BOOL TTGIsSelected(UIView *b) {
     return NO;
 }
 
+static void TTGCollectButtons(UIView *v, NSMutableArray *out, int d) {
+    if (d > 4) return;
+    for (UIView *s in v.subviews) {
+        if (s.tag == kGlassTag || s.tag == kSelTag) continue;
+        if (TTGIsButton(s) && s.bounds.size.width >= 30 && s.bounds.size.width <= 160) [out addObject:s];
+        else TTGCollectButtons(s, out, d + 1);
+    }
+}
+static void TTGClearBG(UIView *v) {
+    for (UIView *s in v.subviews) {
+        if (TTGIsButton(s)) continue;
+        if ([s isKindOfClass:[UIImageView class]] && s.bounds.size.width > 200) s.hidden = YES;
+        else if (s.bounds.size.width > 200) { s.backgroundColor = UIColor.clearColor; TTGClearBG(s); }
+    }
+}
+
 static void TTGSetLabelsHidden(UIView *v, BOOL hidden) {
     for (UIView *s in v.subviews) {
         if ([s isKindOfClass:[UILabel class]]) {
@@ -154,9 +170,10 @@ static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, i
         __block void (^dump)(UIView *, int);
         __block __weak void (^wdump)(UIView *, int);
         wdump = dump = ^(UIView *v, int d) {
-            if (d > 12) return;
+            if (d > 30 || out.length > 12000) return;
             CGRect r = [v convertRect:v.bounds toView:w];
-            if (r.size.height >= 300 || [v isKindOfClass:[UITabBar class]] || d < 3)
+            BOOL inBar = [v isDescendantOfView:ws];
+            if (r.size.height >= 300 || inBar || d < 3)
                 [out appendFormat:@"%@%@ %.0f,%.0f %.0fx%.0f%@\n", [@"" stringByPaddingToLength:d withString:@" " startingAtIndex:0],
                     NSStringFromClass(v.class), r.origin.x, r.origin.y, r.size.width, r.size.height, v.hidden ? @" H" : @""];
             for (UIView *s in v.subviews) wdump(s, d + 1);
@@ -188,20 +205,23 @@ static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, i
         if (v.tag == kGlassTag || v.tag == kSelTag) continue;
         if (TTGIsButton(v)) { [buttons addObject:v]; continue; }
         if ([v isKindOfClass:[UIImageView class]] || [v isKindOfClass:[UIVisualEffectView class]]) { v.hidden = YES; continue; }
-        BOOL hasControls = NO;
-        for (UIView *s in v.subviews) if (TTGIsButton(s)) { hasControls = YES; break; }
-        if (!hasControls && v.subviews.count == 0) v.hidden = YES;
+        NSMutableArray *inner = [NSMutableArray array];
+        TTGCollectButtons(v, inner, 0);
+        if (inner.count) { [buttons addObjectsFromArray:inner]; v.backgroundColor = UIColor.clearColor; TTGClearBG(v); }
+        else if (v.subviews.count == 0) v.hidden = YES;
         else v.backgroundColor = UIColor.clearColor;
     }
-    [buttons sortUsingComparator:^NSComparisonResult(UIView *a, UIView *b) { return [@(a.frame.origin.x) compare:@(b.frame.origin.x)]; }];
+    [buttons sortUsingComparator:^NSComparisonResult(UIView *a, UIView *b) {
+        CGFloat ax = [a.superview convertPoint:a.center toView:self].x, bx = [b.superview convertPoint:b.center toView:self].x;
+        return [@(ax) compare:@(bx)]; }];
 
     CGFloat W = self.bounds.size.width;
     CGFloat bottomInset = self.window ? self.window.safeAreaInsets.bottom : 0;
     BOOL noLabels = TTGNoLabels();
     CGRect pill;
     if (TTGFloating()) {
-        CGFloat h = 62, pw = MIN(W - 56, 340);
-        CGFloat y = self.bounds.size.height - bottomInset - h + (bottomInset > 0 ? 14 : -6);
+        CGFloat h = 64, pw = MIN(W * 0.76, 340);
+        CGFloat y = self.bounds.size.height - bottomInset - h + (bottomInset > 0 ? 12 : -6);
         if (y < 0) y = 0;
         pill = CGRectMake((W - pw) / 2, y, pw, h);
     } else {
@@ -225,17 +245,18 @@ static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, i
     glass.layer.cornerCurve = kCACornerCurveContinuous;
     glass.layer.borderWidth = TTGFloating() ? 0.6 : 0;
 
-    // Instagram-style layout: buttons spread evenly inside the pill.
-    if (TTGFloating() && buttons.count >= 3) {
-        CGFloat inset = 6, slot = (pill.size.width - inset * 2) / buttons.count;
-        for (NSUInteger i = 0; i < buttons.count; i++) {
-            UIView *b = buttons[i];
-            CGRect f = b.frame;
-            f.size.width = MIN(f.size.width, slot);
-            f.origin.x = pill.origin.x + inset + slot * i + (slot - f.size.width) / 2;
-            f.origin.y = pill.origin.y + (pill.size.height - f.size.height) / 2 + (noLabels ? 7 : 0);
-            b.frame = f;
+    // Instagram-style layout: move buttons into the pill with transforms (TikTok re-lays frames, not transforms).
+    NSMutableArray *targets = [NSMutableArray array];
+    CGFloat slotW = (pill.size.width - 12) / MAX((NSUInteger)1, buttons.count);
+    for (NSUInteger i = 0; i < buttons.count; i++) {
+        UIView *b = buttons[i];
+        CGPoint c = [b.superview convertPoint:b.center toView:self];
+        CGPoint t = c;
+        if (TTGFloating() && buttons.count >= 3) {
+            t = CGPointMake(pill.origin.x + 6 + slotW * (i + 0.5), CGRectGetMidY(pill) + (noLabels ? 8 : 0));
         }
+        b.transform = CGAffineTransformMakeTranslation(t.x - c.x, t.y - c.y);
+        [targets addObject:[NSValue valueWithCGPoint:CGPointMake(t.x, CGRectGetMidY(pill))]];
     }
     for (UIView *b in buttons) TTGSetLabelsHidden(b, noLabels);
 
@@ -248,12 +269,14 @@ static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, i
         sel.backgroundColor = [UIColor colorWithWhite:1 alpha:0.16];
         [self insertSubview:sel aboveSubview:glass];
     }
-    UIView *selBtn = nil;
-    for (UIView *b in buttons) if (TTGIsSelected(b)) { selBtn = b; break; }
-    if (selBtn && TTGFloating()) {
-        CGFloat slot = (pill.size.width - 12) / MAX(1, buttons.count);
-        CGFloat sw = MIN(slot + 8, 86), sh = pill.size.height - 10;
-        sel.frame = CGRectMake(CGRectGetMidX(selBtn.frame) - sw / 2, pill.origin.y + 5, sw, sh);
+    NSInteger selIdx = -1;
+    for (NSUInteger i = 0; i < buttons.count; i++) if (TTGIsSelected(buttons[i])) { selIdx = i; break; }
+    if (selIdx < 0 && [self respondsToSelector:@selector(selectedItem)] && self.selectedItem && self.items.count == buttons.count)
+        selIdx = [self.items indexOfObject:self.selectedItem];
+    if (selIdx >= 0 && selIdx < (NSInteger)targets.count && TTGFloating()) {
+        CGFloat sw = MIN(slotW + 6, 96), sh = pill.size.height - 10;
+        CGPoint tc = [targets[selIdx] CGPointValue];
+        sel.frame = CGRectMake(tc.x - sw / 2, pill.origin.y + 5, sw, sh);
         sel.layer.cornerRadius = sh / 2;
         sel.hidden = NO;
     } else sel.hidden = YES;
@@ -268,6 +291,37 @@ static void TTGRefreshIn(UIView *v) {
 static void TTGRefreshAll(void) {
     for (UIWindow *w in UIApplication.sharedApplication.windows) TTGRefreshIn(w);
 }
+
+static void TTGFillFeed(UIView *v, CGFloat barTop, CGFloat fullH, int d) {
+    if (d > 16) return;
+    for (UIView *s in v.subviews) {
+        if (s.hidden) continue;
+        CGFloat ph = s.superview.bounds.size.height;
+        if (fabs(s.frame.size.height - barTop) < 4 && fabs(s.frame.origin.y) < 2 && ph >= fullH - 4) {
+            CGRect f = s.frame; f.size.height = ph; s.frame = f;
+        }
+        TTGFillFeed(s, barTop, fullH, d + 1);
+    }
+}
+
+%hook AWEFeedSlidingScrollView
+- (void)layoutSubviews {
+    %orig;
+    UIView *me = (UIView *)self;
+    UIWindow *w = me.window;
+    if (!w || !TTGEnabled() || !TTGUnder()) return;
+    CGFloat fullH = w.bounds.size.height;
+    CGFloat barTop = fullH - 83;
+    for (UIWindow *ww in UIApplication.sharedApplication.windows) {
+        UIView *tb = nil; NSMutableArray *st = [NSMutableArray arrayWithObject:ww];
+        while (st.count && !tb) { UIView *x = st.lastObject; [st removeLastObject];
+            if ([x isKindOfClass:[UITabBar class]] && !x.hidden) tb = x; else [st addObjectsFromArray:x.subviews]; }
+        if (tb) { barTop = [tb convertRect:tb.bounds toView:w].origin.y; break; }
+    }
+    if (fullH - barTop < 20) return;
+    TTGFillFeed(me, barTop, fullH, 0);
+}
+%end
 
 %hook AWENormalModeTabBarController
 - (void)viewDidLayoutSubviews {
