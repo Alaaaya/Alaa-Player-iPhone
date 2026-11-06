@@ -851,21 +851,62 @@ static NSString *LRoleFor(UIImageView *iv) {
     return nil;
 }
 
+#include "Bubbles.h"
+static UIImage *LBubble(NSString *n) {
+    static NSMutableDictionary *cache; if (!cache) cache = [NSMutableDictionary dictionary];
+    UIImage *im = cache[n]; if (im) return im;
+    const unsigned char *p = bub_pink; unsigned int l = bub_pink_len;
+    if ([n isEqualToString:@"blue"]) { p = bub_blue; l = bub_blue_len; }
+    else if ([n isEqualToString:@"mint"]) { p = bub_mint; l = bub_mint_len; }
+    else if ([n isEqualToString:@"lilac"]) { p = bub_lilac; l = bub_lilac_len; }
+    im = [UIImage imageWithData:[NSData dataWithBytesNoCopy:(void *)p length:l freeWhenDone:NO] scale:3];
+    if (im) cache[n] = im;
+    return im;
+}
+
 static UIImage *LIcon(UIImageView *iv, UIImage *orig) {
     if (!gIcons || !orig || objc_getAssociatedObject(orig, &kMineKey)) return nil;
     NSString *role = LRoleFor(iv);
     if (!role) return nil;
-    NSDictionary *names = @{@"like": @"heart.fill", @"comment": @"bubble.left.and.text.bubble.right.fill", @"save": @"bookmark.fill",
-        @"share": @"paperplane.fill", @"home": @"house.fill", @"friends": @"person.2.fill", @"inbox": @"envelope.fill",
-        @"profile": @"person.crop.circle.fill", @"plus": @"plus.app.fill", @"search": @"sparkle.magnifyingglass"};
-    CGFloat h = MAX(orig.size.height, 20);
-    CGFloat pt = [role isEqualToString:@"plus"] ? h * 0.62 : h * 0.6;
-    UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:pt weight:UIImageSymbolWeightSemibold];
-    UIImage *sym = [UIImage systemImageNamed:names[role] withConfiguration:cfg];
-    if (!sym) return nil;
-    UIColor *c = [role isEqualToString:@"plus"] ? UIColor.whiteColor : LAvgColor(orig);
-    UIImage *out = [sym imageWithTintColor:c renderingMode:UIImageRenderingModeAlwaysOriginal];
+    NSDictionary *names = @{@"like": @"heart.fill", @"comment": @"ellipsis.bubble.fill", @"save": @"bookmark.fill",
+        @"share": @"arrowshape.turn.up.right.fill", @"home": @"house.fill", @"friends": @"person.2.fill", @"inbox": @"envelope.fill",
+        @"profile": @"person.fill", @"plus": @"plus", @"search": @"magnifyingglass"};
+    NSDictionary *bubbles = @{@"like": @"pink", @"comment": @"blue", @"save": @"mint", @"share": @"lilac",
+        @"home": @"pink", @"friends": @"blue", @"inbox": @"mint", @"profile": @"lilac", @"plus": @"pink", @"search": @"blue"};
+    BOOL feed = [@[@"like", @"comment", @"save", @"share"] containsObject:role];
+    BOOL tab = [@[@"home", @"friends", @"inbox", @"profile"] containsObject:role];
+    CGFloat side = feed ? 50 : ([role isEqualToString:@"plus"] ? 50 : ([role isEqualToString:@"search"] ? 38 : 40));
+
+    UIColor *avg = LAvgColor(orig);
+    CGFloat r = 1, g = 1, b = 1, a = 1; [avg getRed:&r green:&g blue:&b alpha:&a];
+    CGFloat mx = MAX(r, MAX(g, b)), mn = MIN(r, MIN(g, b));
+    BOOL vivid = (mx - mn) > 0.35 && ![role isEqualToString:@"plus"];
+    BOOL dim = tab && !vivid && mx < 0.8;
+    UIColor *glyph = vivid ? [UIColor colorWithRed:r green:g blue:b alpha:1] : UIColor.whiteColor;
+    if (vivid && [role isEqualToString:@"like"]) glyph = [UIColor colorWithRed:0.93 green:0.16 blue:0.32 alpha:1];
+
+    NSString *key = [NSString stringWithFormat:@"%@|%d|%d|%.2f%.2f%.2f", role, vivid, dim, r, g, b];
+    static NSCache *rc; if (!rc) rc = [NSCache new];
+    UIImage *cached = [rc objectForKey:key]; if (cached) return cached;
+
+    UIImage *bub = LBubble(bubbles[role]);
+    UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:side * 0.40 weight:UIImageSymbolWeightBold];
+    UIImage *sym = [[UIImage systemImageNamed:names[role] withConfiguration:cfg] imageWithTintColor:glyph renderingMode:UIImageRenderingModeAlwaysOriginal];
+    if (!bub || !sym) return nil;
+    UIGraphicsImageRenderer *rr = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(side, side)];
+    UIImage *out = [rr imageWithActions:^(UIGraphicsImageRendererContext *c) {
+        CGContextRef ctx = c.CGContext;
+        CGFloat al = dim ? 0.55 : 1;
+        [bub drawInRect:CGRectMake(0, 0, side, side) blendMode:kCGBlendModeNormal alpha:al];
+        CGContextSaveGState(ctx);
+        CGContextSetShadowWithColor(ctx, CGSizeMake(0, 1), 3, [UIColor colorWithWhite:0 alpha:0.28].CGColor);
+        CGSize ss = sym.size;
+        [sym drawInRect:CGRectMake((side - ss.width) / 2, (side - ss.height) / 2, ss.width, ss.height) blendMode:kCGBlendModeNormal alpha:al];
+        CGContextRestoreGState(ctx);
+    }];
+    out = [out imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
     objc_setAssociatedObject(out, &kMineKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [rc setObject:out forKey:key];
     return out;
 }
 
@@ -888,7 +929,12 @@ static void LReapply(UIView *v, int d) {
 }
 
 %hook AWEFeedVideoButton
-- (void)didMoveToWindow { %orig; if (gIcons && self.window) LReapply(self, 0); }
+- (void)didMoveToWindow {
+    %orig;
+    if (!gIcons || !self.window) return;
+    LReapply(self, 0);
+    for (UIView *s in self.subviews) for (UIView *t in s.subviews) if ([t isKindOfClass:[UIVisualEffectView class]]) s.alpha = 0;
+}
 %end
 %hook TTKTabBarButton
 - (void)didMoveToWindow { %orig; if (gIcons && self.window) LReapply(self, 0); }
