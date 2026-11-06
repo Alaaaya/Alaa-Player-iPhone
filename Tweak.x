@@ -678,3 +678,108 @@ static void TTGUnclip(UIView *v) {
 %hook TTKMediaBusinessCoverImageView
 - (void)setFrame:(CGRect)f { %orig(TTGStretch((UIView *)self, f)); }
 %end
+
+// ===== Lamha theme stage 2 (2.1): feed decorations, applied once per view, O(1) per layout =====
+static char kLBgKey, kLGlyphKey;
+
+static UIView *LGlassBG(CGFloat radius) {
+    UIView *w = [UIView new];
+    w.userInteractionEnabled = NO;
+    w.layer.shadowColor = UIColor.blackColor.CGColor; w.layer.shadowOpacity = 0.35;
+    w.layer.shadowRadius = 10; w.layer.shadowOffset = CGSizeMake(0, 4);
+    UIVisualEffectView *b = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialDark]];
+    b.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    b.clipsToBounds = YES; b.layer.cornerRadius = radius; b.layer.cornerCurve = kCACornerCurveContinuous;
+    b.layer.borderWidth = 0.8; b.layer.borderColor = [UIColor colorWithRed:1 green:0.8 blue:0.75 alpha:0.14].CGColor;
+    UIView *t = [UIView new]; t.autoresizingMask = b.autoresizingMask; t.backgroundColor = LPlum(0.55);
+    [b.contentView addSubview:t];
+    [w addSubview:b];
+    return w;
+}
+
+static UIView *LBg(UIView *host, CGFloat radius) {
+    UIView *bg = objc_getAssociatedObject(host, &kLBgKey);
+    if (!bg) {
+        bg = LGlassBG(radius);
+        objc_setAssociatedObject(host, &kLBgKey, bg, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        host.clipsToBounds = NO;
+        [host insertSubview:bg atIndex:0];
+    }
+    bg.hidden = !(TTGEnabled() && TTGTheme());
+    return bg;
+}
+
+static void LSetBgFrame(UIView *bg, CGRect f, CGFloat radius) {
+    if (CGRectEqualToRect(bg.frame, f)) return;
+    bg.frame = f;
+    UIView *b = bg.subviews.firstObject; b.frame = bg.bounds; b.layer.cornerRadius = radius;
+    ((UIView *)((UIVisualEffectView *)b).contentView.subviews.firstObject).frame = b.bounds;
+}
+
+static UIView *LFindGlyph(UIView *v, int d) {
+    if (d > 4) return nil;
+    for (UIView *s in v.subviews) {
+        if ([NSStringFromClass(s.class) isEqualToString:@"TTGActionGlyph"]) return s;
+        UIView *r = LFindGlyph(s, d + 1); if (r) return r;
+    }
+    return nil;
+}
+
+static void LCircleBehindGlyph(UIView *host, CGFloat side) {
+    if (!(TTGEnabled() && TTGTheme())) { [objc_getAssociatedObject(host, &kLBgKey) setHidden:YES]; return; }
+    UIView *bg = LBg(host, side / 2);
+    UIView *g = objc_getAssociatedObject(host, &kLGlyphKey);
+    if (!g || ![g isDescendantOfView:host]) {
+        g = LFindGlyph(host, 0);
+        if (!g) for (UIView *s in host.subviews) if ([s isKindOfClass:[UIImageView class]] && s != bg) { g = s; break; }
+        if (g) objc_setAssociatedObject(host, &kLGlyphKey, g, OBJC_ASSOCIATION_ASSIGN);
+    }
+    CGPoint c = g ? [g.superview convertPoint:g.center toView:host] : CGPointMake(CGRectGetMidX(host.bounds), side / 2);
+    if (host.subviews.firstObject != bg) [host sendSubviewToBack:bg];
+    LSetBgFrame(bg, CGRectMake(c.x - side / 2, c.y - side / 2, side, side), side / 2);
+}
+
+static void LBehind(UIView *host, CGFloat dx, CGFloat dy, CGFloat radius) {
+    if (!(TTGEnabled() && TTGTheme())) { [objc_getAssociatedObject(host, &kLBgKey) setHidden:YES]; return; }
+    UIView *bg = LBg(host, radius);
+    if (host.subviews.firstObject != bg) [host sendSubviewToBack:bg];
+    LSetBgFrame(bg, CGRectInset(host.bounds, -dx, -dy), radius);
+}
+
+@interface AWEFeedVideoButton : UIView @end
+@interface TTKSearchEntranceButton : UIView @end
+@interface AWELiveFeedEntranceView : UIView @end
+@interface TikTokFeedTabControl : UIView @end
+@interface AWEPlayInteractionAuthorView : UIView @end
+@interface AWEFeedPlayerBottomProgressBar : UIView @end
+
+%hook AWEFeedVideoButton
+- (void)layoutSubviews { %orig; LCircleBehindGlyph(self, 48); }
+%end
+
+%hook TTKSearchEntranceButton
+- (void)layoutSubviews { %orig; LCircleBehindGlyph(self, 42); }
+%end
+
+%hook AWELiveFeedEntranceView
+- (void)layoutSubviews { %orig; LCircleBehindGlyph(self, 42); }
+%end
+
+%hook TikTokFeedTabControl
+- (void)layoutSubviews {
+    %orig;
+    CGFloat h = self.bounds.size.height;
+    LBehind(self, 10, MAX(0, (44 - h) / 2), (MAX(h, 44)) / 2);
+}
+%end
+
+%hook AWEPlayInteractionAuthorView
+- (void)layoutSubviews { %orig; LBehind(self, 12, 10, 20); }
+%end
+
+%hook AWEFeedPlayerBottomProgressBar
+- (void)didMoveToWindow {
+    %orig;
+    if (TTGEnabled() && TTGTheme()) self.tintColor = LCoral();
+}
+%end
