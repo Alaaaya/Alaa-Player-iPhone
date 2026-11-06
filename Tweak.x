@@ -24,7 +24,9 @@ static BOOL PB(NSString *k, BOOL def) { id v = [D() objectForKey:k]; return v ? 
 #define TTGFloating() PB(kPrefFloating, YES)
 #define TTGUnder()    PB(kPrefUnder, YES)
 #define TTGNoLabels() PB(kPrefLabels, YES)
-#define TTGTheme()    PB(kPrefTheme, YES)
+#define TTGTheme()    PB(kPrefTheme, NO)
+#define kPrefIcons    @"alaa_tt_icons"
+static BOOL gIcons = YES;
 static NSInteger TTGStyle(void) { return [D() integerForKey:kPrefStyle]; }
 static void TTGRefreshAll(void);
 
@@ -216,9 +218,9 @@ static void TTGExtend(UIView *v, CGFloat barTop, CGFloat bottom, UIView *skip, i
         BOOL on = PB(key, def);
         [ac addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%@ %@", on ? @"✅" : @"⬜️", title]
             style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
-                [D() setBool:!on forKey:key]; TTGRefreshAll(); [ws ttg_reopen]; }]];
+                [D() setBool:!on forKey:key]; gIcons = PB(kPrefIcons, YES); TTGRefreshAll(); [ws ttg_reopen]; }]];
     };
-    toggle(@"ثيم لمحة 🧡", kPrefTheme, YES);
+    toggle(@"أيقونات جديدة ✨", kPrefIcons, YES);
     toggle(@"الشريط الزجاجي", kPrefEnabled, YES);
     toggle(@"كبسولة عائمة (متل انستا)", kPrefFloating, YES);
     toggle(@"الفيديو تحت الشريط", kPrefUnder, YES);
@@ -783,3 +785,126 @@ static void LBehind(UIView *host, CGFloat dx, CGFloat dy, CGFloat radius) {
     if (TTGEnabled() && TTGTheme()) self.tintColor = LCoral();
 }
 %end
+
+
+@interface TTKTabBarButton : UIView @end
+@interface AWETabBarPlusButton : UIView @end
+
+// ===== 2.2: custom icons (SF Symbols), tinted with the original icon's colour so states (liked/saved/selected) stay =====
+static char kMineKey, kRoleKey;
+static Class cFeedBtn, cTabBtn, cPlusBtn, cSearchBtn;
+
+static UIColor *LAvgColor(UIImage *img) {
+    CGImageRef cg = img.CGImage;
+    if (!cg) return UIColor.whiteColor;
+    unsigned char px[4] = {0};
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGContextRef ctx = CGBitmapContextCreate(px, 1, 1, 8, 4, cs, kCGImageAlphaPremultipliedLast);
+    CGColorSpaceRelease(cs);
+    if (!ctx) return UIColor.whiteColor;
+    CGContextSetInterpolationQuality(ctx, kCGInterpolationMedium);
+    CGContextDrawImage(ctx, CGRectMake(0, 0, 1, 1), cg);
+    CGContextRelease(ctx);
+    if (px[3] < 8) return UIColor.whiteColor;
+    CGFloat a = px[3] / 255.0;
+    CGFloat r = MIN(1, px[0] / 255.0 / a), g = MIN(1, px[1] / 255.0 / a), b = MIN(1, px[2] / 255.0 / a);
+    CGFloat mx = MAX(r, MAX(g, b));
+    if (mx > 0.05 && (mx - MIN(r, MIN(g, b))) > 0.25) { r /= mx; g /= mx; b /= mx; } // keep vivid colours vivid (red heart, yellow bookmark)
+    return [UIColor colorWithRed:r green:g blue:b alpha:1];
+}
+
+static NSString *LRoleFor(UIImageView *iv) {
+    UIView *p1 = iv.superview, *p2 = p1.superview, *p3 = p2.superview;
+    if (!p1) return nil;
+    if (cFeedBtn && [p2 isKindOfClass:cFeedBtn]) {
+        NSString *role = objc_getAssociatedObject(p2, &kRoleKey);
+        if (role) return role;
+        if ([NSStringFromClass(p3.class) containsString:@"LikeView"]) role = @"like";
+        else {
+            UIView *stack = p3.superview;
+            if (![NSStringFromClass(stack.class) containsString:@"RightInteractionStackView"]) return nil;
+            NSInteger k = 0, mine = -1;
+            for (UIView *area in stack.subviews) {
+                if ([NSStringFromClass(area.class) containsString:@"LikeView"]) continue;
+                for (UIView *b in area.subviews) if ([b isKindOfClass:cFeedBtn]) { if (b == p2) mine = k; k++; }
+            }
+            NSArray *roles = @[@"comment", @"save", @"share"];
+            if (mine < 0 || mine >= (NSInteger)roles.count) return nil;
+            role = roles[mine];
+        }
+        objc_setAssociatedObject(p2, &kRoleKey, role, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return role;
+    }
+    if (cTabBtn && [p2 isKindOfClass:cTabBtn]) {
+        NSString *role = objc_getAssociatedObject(p2, &kRoleKey);
+        if (role) return role;
+        UIView *bar = p2.superview; if (!bar) return nil;
+        NSInteger k = 0, mine = -1;
+        for (UIView *b in bar.subviews) if ([b isKindOfClass:cTabBtn]) { if (b == p2) mine = k; k++; }
+        if (k != 4 || mine < 0) return nil;
+        role = @[@"home", @"friends", @"inbox", @"profile"][mine];
+        objc_setAssociatedObject(p2, &kRoleKey, role, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return role;
+    }
+    if (cPlusBtn && [p1 isKindOfClass:cPlusBtn] && ![iv isKindOfClass:NSClassFromString(@"YYAnimatedImageView")]) return @"plus";
+    if (cSearchBtn && [p1 isKindOfClass:cSearchBtn]) return @"search";
+    return nil;
+}
+
+static UIImage *LIcon(UIImageView *iv, UIImage *orig) {
+    if (!gIcons || !orig || objc_getAssociatedObject(orig, &kMineKey)) return nil;
+    NSString *role = LRoleFor(iv);
+    if (!role) return nil;
+    NSDictionary *names = @{@"like": @"heart.fill", @"comment": @"bubble.left.and.text.bubble.right.fill", @"save": @"bookmark.fill",
+        @"share": @"paperplane.fill", @"home": @"house.fill", @"friends": @"person.2.fill", @"inbox": @"envelope.fill",
+        @"profile": @"person.crop.circle.fill", @"plus": @"plus.app.fill", @"search": @"sparkle.magnifyingglass"};
+    CGFloat h = MAX(orig.size.height, 20);
+    CGFloat pt = [role isEqualToString:@"plus"] ? h * 0.62 : h * 0.6;
+    UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:pt weight:UIImageSymbolWeightSemibold];
+    UIImage *sym = [UIImage systemImageNamed:names[role] withConfiguration:cfg];
+    if (!sym) return nil;
+    UIColor *c = [role isEqualToString:@"plus"] ? UIColor.whiteColor : LAvgColor(orig);
+    UIImage *out = [sym imageWithTintColor:c renderingMode:UIImageRenderingModeAlwaysOriginal];
+    objc_setAssociatedObject(out, &kMineKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return out;
+}
+
+%hook UIImageView
+- (void)setImage:(UIImage *)img {
+    UIImage *r = (gIcons && img) ? LIcon(self, img) : nil;
+    if (r) { self.contentMode = UIViewContentModeCenter; %orig(r); } else %orig;
+}
+%end
+
+static void LReapply(UIView *v, int d) {
+    if (d > 3) return;
+    for (UIView *s in v.subviews) {
+        if ([s isKindOfClass:[UIImageView class]]) {
+            UIImageView *iv = (UIImageView *)s;
+            if (iv.image && !objc_getAssociatedObject(iv.image, &kMineKey)) iv.image = iv.image;
+        }
+        LReapply(s, d + 1);
+    }
+}
+
+%hook AWEFeedVideoButton
+- (void)didMoveToWindow { %orig; if (gIcons && self.window) LReapply(self, 0); }
+%end
+%hook TTKTabBarButton
+- (void)didMoveToWindow { %orig; if (gIcons && self.window) LReapply(self, 0); }
+%end
+%hook AWETabBarPlusButton
+- (void)didMoveToWindow { %orig; if (gIcons && self.window) LReapply(self, 0); }
+%end
+%hook TTKSearchEntranceButton
+- (void)didMoveToWindow { %orig; if (gIcons && self.window) LReapply(self, 0); }
+%end
+
+%ctor {
+    gIcons = PB(kPrefIcons, YES);
+    cFeedBtn = objc_getClass("AWEFeedVideoButton");
+    cTabBtn = objc_getClass("TTKTabBarButton");
+    cPlusBtn = objc_getClass("AWETabBarPlusButton");
+    cSearchBtn = objc_getClass("TTKSearchEntranceButton");
+    %init;
+}
